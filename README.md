@@ -1,2 +1,2 @@
 # VAEgen
-Variational Autoencoder for genome simulation
+Variational Autoencoder for genomic data simulation.
