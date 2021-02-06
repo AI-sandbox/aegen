@@ -13,8 +13,3 @@ echo "Executing experiment $1"
 python3 src/trainer.py
 echo "Success!"
 EOT
-
-
-
-
-
