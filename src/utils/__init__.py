@@ -1,2 +1,2 @@
 from .decorators import timer
-from .loader import GenDataset, loader
+from .loader import SNPs, loader
