@@ -38,7 +38,7 @@ class SNPs(Dataset):
 
     def __getitem__(self, index):
         snps_array = self.snps[index,:]
-        snps_array[np.where(snps_array == 0)] = -1
+        # snps_array[np.where(snps_array == 0)] = -1 for denoising/imputation VAE
         snps_array = torch.tensor(snps_array).float()
         # pop_id = torch.tensor(self.mapper[self.pops[index]]).int()
         # spop_id = torch.tensor(self.spops[index]).int()
@@ -46,9 +46,9 @@ class SNPs(Dataset):
         return snps_array
 
 @timer
-def loader(DATA_PATH = os.path.join(os.environ.get('USER_PATH'), 'data/ancestry_datasets'), batch_size=10):
+def loader(DATA_PATH, batch_size, max_limit):
     path = f'{DATA_PATH}/All_chm_World/all_chm_combined_snps_world_2M_with_labels.npz'
-    dataset = SNPs(data=path, max_limit=100000, max_variance=True)
+    dataset = SNPs(data=path, max_limit=max_limit, max_variance=True)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
     return dataloader
     
