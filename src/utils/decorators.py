@@ -1,9 +1,10 @@
 import time
 
 def timer(f):
-    def wrapper():
+    def wrapper(*args, **kwargs):
         ini = time.time()
-        f()
+        res = f(*args, **kwargs)
         elapsed = time.time() - ini
-        print(f'Total {elapsed}s elapsed for execution.')
+        print(f'Total {elapsed}s elapsed for {f.__name__} execution.')
+        return res
     return wrapper
