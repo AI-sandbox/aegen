@@ -51,5 +51,3 @@ def loader(DATA_PATH, batch_size, max_limit):
     dataset = SNPs(data=path, max_limit=max_limit, max_variance=True)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
     return dataloader
-    
-
