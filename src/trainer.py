@@ -1,10 +1,18 @@
 import os
 import time
 import torch
+import datetime
+import numpy as np
 from models.VAEgen import VAEgen
-from models.losses import VAEloss
+from models.losses import VAEloss, L1loss
 from utils.loader import loader 
 from utils.decorators import timer 
+from utils.loggers import progress
+from tensorboardX import SummaryWriter
+
+LOGDIR = os.path.join(os.path.join(os.environ.get('USER_PATH'), f"logs/{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"))
+writer = SummaryWriter(log_dir=LOGDIR)
+print(LOGDIR)
 
 def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('USER_PATH'), 'checkpoints/checkpoint.pt')):
      """Save checkpoint if a new best is achieved"""
@@ -16,27 +24,34 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('USER_P
 
 @timer
 def train(model, dataloader, hyperparams):
-    optimizer = torch.optim.Adam(params=vae.parameters(), lr=hyperparams['lr'], weight_decay=hyperparams['weight_decay'])
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=hyperparams['lr'], weight_decay=hyperparams['weight_decay'])
 
     # This is the number of parameters used in the model
-    num_params = sum(p.numel() for p in vae.parameters() if p.requires_grad)
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f'Number of model parameters: {num_params}')
 
-    # set to training mode
+    # Set to training mode
     model.train()
 
-    train_loss_avg = 0
+    best_loss = np.inf
     datalen = len(dataloader)
 
-    print('Training ...')
+    total_vae_loss, total_rec_loss, total_KL_div  = [], [], []
+    total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
+
+    print('Training loop starting now ...')
     for epoch in range(hyperparams['epochs']):
         
-        num_batches = 0
+        ini = time.time()
+
+        epoch_vae_loss, epoch_rec_loss, epoch_KL_div  = [], [], []
+        epoch_L1_loss, epoch_zeros_loss, epoch_ones_loss = [], [], []
         
         for i, snps_array in enumerate(dataloader):
 
             snps_reconstruction, latent_mu, latent_logvar = model(snps_array)
-            loss, _ = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
+            loss, rec_loss, kl_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
+            l1_loss, zeros_loss, ones_loss = L1loss(snps_array, snps_reconstruction, partial=True)
 
             # Backpropagation
             optimizer.zero_grad()
@@ -45,36 +60,79 @@ def train(model, dataloader, hyperparams):
             # One step of the optimizer (using the gradients from backpropagation)
             optimizer.step()
 
-            train_loss_avg += loss.item()
+            epoch_vae_loss.append(loss.item())
+            epoch_rec_loss.append(rec_loss.item())
+            epoch_KL_div.append(kl_div.item())
 
-            print(f"Epoch progress: [{(i + 1)} / {datalen}] " + '='*(i + 1) + '-'*(datalen - (i + 1)))
-            
-        print(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] average reconstruction error: {train_loss_avg / (i + 1)}")
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'beta': hyperparams['beta'],
-            'lr': hyperparams['lr'],
-        }, is_best = True, filename=os.path.join(os.environ.get('USER_PATH'), f'checkpoints/checkpoint_VAE_{epoch + 1}.pt'))
+            epoch_L1_loss.append(l1_loss.item())
+            epoch_zeros_loss.append(zeros_loss)
+            epoch_ones_loss.append(ones_loss)
+
+            progress(
+                current=i+1, total=datalen, batch_size=hyperparams['batch_size'], time=time.time()-ini,
+                vae_loss=epoch_vae_loss, rec_loss=epoch_rec_loss, KL_div=epoch_KL_div,
+                L1_loss=epoch_L1_loss, zeros_loss=epoch_zeros_loss, ones_loss=epoch_ones_loss
+            )
+
+        total_vae_loss.append(np.mean(epoch_vae_loss))
+        total_rec_loss.append(np.mean(epoch_rec_loss))
+        total_KL_div.append(np.mean(epoch_KL_div))
+
+        total_L1_loss.append(np.mean(epoch_l1_loss))
+        total_zeros_loss.append(np.mean(epoch_zeros_loss))
+        total_ones_loss.append(np.mean(epoch_ones_loss))
+
+        writer.add_scalar(f'VAE_losses', {
+            'VAE_loss': total_vae_loss[-1],
+            'rec_loss': total_rec_loss[-1],
+            'KL_div': total_KL_div[-1],
+        }, epoch + 1)
+		
+        writer.add_scalar(f'L1_losses', {
+            'L1_loss': total_L1_loss[-1],
+            'zeros_loss': total_zeros_loss[-1],
+            'ones_loss': total_ones_loss[-1],
+        }, epoch + 1)
+
+        print(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
+        
+        is_best = bool(total_vae_loss[-1].detach().cpu() > best_loss)
+        if is_best:
+            best_loss = total_vae_loss[-1].detach().cpu()
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'state_dict': model.state_dict(),
+                'beta': hyperparams['beta'],
+                'lr': hyperparams['lr'],
+                'vae_losses': total_vae_loss,
+                'rec_losses': total_rec_loss,
+                'kl_div': total_KL_div,
+                'l1_losses': total_L1_loss,
+                'zeros_losses': total_zeros_loss,
+                'ones_losses': total_ones_loss,
+            }, is_best = is_best, filename=os.path.join(os.environ.get('USER_PATH'), f'checkpoints/checkpoint_VAE.pt'))
+    
+    print(f'Training finished in {time.time() - ini}s.')
 
 if __name__ == '__main__':
 
     hyperparams = {
         'max_limit': 100000,
         'epochs': 80,
-        'batch_size': 128,
+        'batch_size': 64,
         'hidden_dims': 1024,
         'latent_dims': 512,
-        'lr': 1e-3,
+        'lr': 0.01,
         'beta': 1,
-        'weight_decay': 1e-5,
+        'weight_decay': 0,
     }
 
     dataloader = loader(DATA_PATH = os.path.join(os.environ.get('USER_PATH'), 'data/ancestry_datasets'),
                         batch_size=hyperparams['batch_size'], 
                         max_limit=hyperparams['max_limit'])
-    print(dataloader)
 
     vae = VAEgen(input=hyperparams['max_limit'], hidden=hyperparams['hidden_dims'], latent=hyperparams['latent_dims'])
+    snps_array = next(iter(dataloader))
+    writer.add_graph(vae, snps_array.detach(), verbose = False)
 
     train(model=vae, dataloader=dataloader, hyperparams=hyperparams)
