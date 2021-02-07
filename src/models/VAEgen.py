@@ -7,12 +7,13 @@ class Encoder(nn.Module):
         super().__init__()
 
         self.fc_1 = nn.Linear(input, hidden)
+        self.bn_1 = nn.BatchNorm1d(hidden)
         self.fc_mu = nn.Linear(hidden, latent)
         self.fc_logvar = nn.Linear(hidden, latent)
         self.ReLU = nn.ReLU()
 
     def forward(self, x):
-        o = self.ReLU(self.fc_1(x))
+        o = self.ReLU(self.bn_1(self.fc_1(x)))
         o_mu = self.ReLU(self.fc_mu(o))
         o_var = self.ReLU(self.fc_logvar(o))
         return o_mu, o_var
@@ -22,13 +23,15 @@ class Decoder(nn.Module):
         super().__init__()
 
         self.fc_1 = nn.Linear(latent, hidden)
+        self.bn_1 = nn.BatchNorm1d(hidden)
         self.fc_2 = nn.Linear(hidden, output)
+        self.bn_2 = nn.BatchNorm1d(output)
         self.ReLU = nn.ReLU()
         self.Sigmoid = nn.Sigmoid()
 
     def forward(self, z):
-        o = self.ReLU(self.fc_1(z))
-        o = self.Sigmoid(self.fc_2(o))
+        o = self.ReLU(self.bn_1(self.fc_1(z)))
+        o = self.Sigmoid(self.bn_2(self.fc_2(o)))
         return o
 
 class VAEgen(nn.Module):
@@ -48,4 +51,3 @@ class VAEgen(nn.Module):
         z = self.reparametrize(z_mu, z_logvar)
         o = self.decoder(z)
         return o, z_mu, z_logvar
-
