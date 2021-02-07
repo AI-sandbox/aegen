@@ -1,9 +1,13 @@
 import numpy as np
 
 
-def progress(current, total, batch_size=None, bar=True, time=None, **kwargs):
+def progress(current, total, train=True, bar=True, time=None, **kwargs):
 
-    indicator = f'Progress: [{current} / {total}]'
+    if train:
+        indicator = f'Progress: [{current} / {total}]'
+    else:
+        indicator = f'Validation:'
+        
     bar_progress = ''
     metrics = ''
 
