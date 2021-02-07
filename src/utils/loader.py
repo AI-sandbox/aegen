@@ -1,30 +1,35 @@
 import os
 import time
 import torch
+import random
 import numpy as np
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from .decorators import timer 
 
 class SNPs(Dataset):
-    def __init__(self, data, max_limit=25000, max_variance=True):
+    def __init__(self, data, max_limit=25000, max_variance=True, split_set='train', seed=123):
         """
         Inputs:
             data: SNPs data in .npz files
             max_limit: maximum number of SNPs to use
             max_variance: select SNPs with maximum variance
         """
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
         data = np.load(data, allow_pickle=True)
         self.snps = data["snps"].astype(float)
-        # self.pops = data["populations"][:max_limit]
+        self.pops = data["populations"]
         # self.spops = data["subpopulations"][:max_limit]
         self._max_limit = max_limit
 
         print(self.snps.shape)
-        # print(self.pops.shape)
+        print(self.pops.shape)
 
-        # pops = ['AFR', 'EAS', 'EUR', 'AMR', 'OCE', 'SAS', 'WAS']
-        # self.mapper = dict(zip(pops, np.arange(0, len(pops))))
+        pops = ['AFR', 'EAS', 'EUR', 'AMR', 'OCE', 'SAS', 'WAS']
+        self.mapper = dict(zip(pops, np.arange(0, len(pops))))
 
         if max_variance:
             variances = self.snps.var(axis=0)
@@ -46,8 +51,17 @@ class SNPs(Dataset):
         return snps_array
 
 @timer
-def loader(DATA_PATH, batch_size, max_limit):
-    path = f'{DATA_PATH}/All_chm_World/all_chm_combined_snps_world_2M_with_labels.npz'
-    dataset = SNPs(data=path, max_limit=max_limit, max_variance=True)
+def loader(data_path, batch_size, max_limit, split_set='train', seed='123'):
+    path = f'{data_path}/All_chm_World/all_chm_combined_snps_world_2M_with_labels.npz'
+    dataset = SNPs(data=path, max_limit=max_limit, max_variance=True, split_set=split_set, seed=seed)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
     return dataloader
+
+if __name__ == '__main__':
+    data = loader(
+        data_path=os.path.join(os.environ.get('USER_PATH'), 'data/ancestry_datasets'),
+        batch_size=64, 
+        max_limit=100000,
+        split_set='train'
+    )
+    print(data)
