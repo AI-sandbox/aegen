@@ -1,2 +1,2 @@
-from .losses import VAEloss
+from .losses import VAEloss, L1loss
 from .VAEgen import VAEgen
