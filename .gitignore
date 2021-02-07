@@ -2,6 +2,8 @@
 logs/*
 notebooks/*
 ini.sh
+data/*
+*/__pycache__/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
