@@ -23,7 +23,13 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('USER_P
          print ("=> Loss did not improve")
 
 @timer
-def train(model, dataloader, hyperparams):
+def train(model, tr_loader, val_loader, hyperparams):
+
+    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f'Using device: {device}')
+
+    model.to(device)
+
     optimizer = torch.optim.Adam(params=model.parameters(), lr=hyperparams['lr'], weight_decay=hyperparams['weight_decay'])
 
     # This is the number of parameters used in the model
@@ -34,7 +40,7 @@ def train(model, dataloader, hyperparams):
     model.train()
 
     best_loss = np.inf
-    datalen = len(dataloader)
+    datalen = len(tr_loader)
 
     total_vae_loss, total_rec_loss, total_KL_div  = [], [], []
     total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
@@ -47,7 +53,9 @@ def train(model, dataloader, hyperparams):
         epoch_vae_loss, epoch_rec_loss, epoch_KL_div  = [], [], []
         epoch_L1_loss, epoch_zeros_loss, epoch_ones_loss = [], [], []
         
-        for i, snps_array in enumerate(dataloader):
+        for i, snps_array in enumerate(tr_loader):
+
+            snps_array = snps_array.to(device)
 
             snps_reconstruction, latent_mu, latent_logvar = model(snps_array)
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
@@ -114,6 +122,48 @@ def train(model, dataloader, hyperparams):
     
     print(f'Training finished in {time.time() - ini}s.')
 
+@timer
+def validate(model, val_loader):
+
+    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f'Using device: {device}')
+
+    model.to(device)
+
+    # Set to evaluation mode
+    model.eval()
+    loss = 0
+
+    total_vae_loss, total_rec_loss, total_KL_div  = [], [], []
+    total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
+    
+    ini = time.time()
+    with torch.no_grad():
+        print('Validating current model...')
+        for i, snps_array in enumerate(val_loader):
+
+            snps_array = snps_array.to(device)
+
+            snps_reconstruction, latent_mu, latent_logvar = model(snps_array)
+
+            loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
+            L1_loss, zeros_loss, ones_loss = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
+
+            total_vae_loss.append(loss)
+            total_rec_loss.append(rec_loss)
+            total_KL_div.append(KL_div)
+
+            total_L1_loss.append(L1_loss)
+            total_zeros_loss.append(zeros_loss)
+            total_ones_loss.append(ones_loss)
+
+        progress(
+            current=0, total=0, train=False, bar=False, time=time.time()-ini,
+            vae_loss=total_vae_loss, rec_loss=total_rec_loss, KL_div=total_KL_div,
+            L1_loss=total_L1_loss, zeros_loss=total_zeros_loss, ones_loss=total_ones_loss
+        )
+        
+
 if __name__ == '__main__':
 
     hyperparams = {
@@ -141,4 +191,4 @@ if __name__ == '__main__':
     snps_array = next(iter(dataloader))
     writer.add_graph(vae, snps_array.detach(), verbose = False)
 
-    train(model=vae, dataloader=dataloader, hyperparams=hyperparams)
+    train(model=vae, tr_loader=dataloader, hyperparams=hyperparams)
