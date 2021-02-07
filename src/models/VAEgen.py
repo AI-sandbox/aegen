@@ -3,43 +3,47 @@ import numpy as np
 import torch.nn as nn
 
 class Encoder(nn.Module):
-    def __init__(self, input, hidden, latent):
+    def __init__(self, input, hidden1, hidden2, latent):
         super().__init__()
 
-        self.fc_1 = nn.Linear(input, hidden)
-        self.bn_1 = nn.BatchNorm1d(hidden)
-        self.fc_mu = nn.Linear(hidden, latent)
-        self.fc_logvar = nn.Linear(hidden, latent)
+        self.fc_1 = nn.Linear(input, hidden1)
+        self.bn_1 = nn.BatchNorm1d(hidden1)
+        self.fc_2 = nn.Linear(hidden1, hidden2)
+        self.bn_2 = nn.BatchNorm1d(hidden2)
+        self.fc_mu = nn.Linear(hidden2, latent)
+        self.fc_logvar = nn.Linear(hidden2, latent)
         self.ReLU = nn.ReLU()
 
     def forward(self, x):
         o = self.ReLU(self.bn_1(self.fc_1(x)))
+        o = self.ReLU(self.bn_2(self.fc_2(o)))
         o_mu = self.ReLU(self.fc_mu(o))
         o_var = self.ReLU(self.fc_logvar(o))
         return o_mu, o_var
 
 class Decoder(nn.Module):
-    def __init__(self, latent, hidden, output):
+    def __init__(self, latent, hidden2, hidden1, output):
         super().__init__()
 
-        self.fc_1 = nn.Linear(latent, hidden)
-        self.bn_1 = nn.BatchNorm1d(hidden)
-        self.fc_2 = nn.Linear(hidden, output)
-        self.bn_2 = nn.BatchNorm1d(output)
+        self.fc_1 = nn.Linear(latent, hidden2)
+        self.bn_1 = nn.BatchNorm1d(hidden2)
+        self.fc_2 = nn.Linear(hidden2, hidden1)
+        self.fc_3 = nn.Linear(hidden1, output)
         self.ReLU = nn.ReLU()
         self.Sigmoid = nn.Sigmoid()
 
     def forward(self, z):
         o = self.ReLU(self.bn_1(self.fc_1(z)))
-        o = self.Sigmoid(self.bn_2(self.fc_2(o)))
+        o = self.ReLU(self.fc_2(o))
+        o = self.Sigmoid(self.fc_3(o))
         return o
 
 class VAEgen(nn.Module):
-    def __init__(self, input, hidden, latent):
+    def __init__(self, input, hidden1, hidden2, latent):
         super().__init__()
         
-        self.encoder = Encoder(input=input, hidden=hidden, latent=latent)
-        self.decoder = Decoder(latent=latent, hidden=hidden, output=input)
+        self.encoder = Encoder(input=input, hidden1=hidden1, hidden2=hidden2, latent=latent)
+        self.decoder = Decoder(latent=latent, hidden2=hidden2, hidden1=hidden1, output=input)
     
     def reparametrize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
