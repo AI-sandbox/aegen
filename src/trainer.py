@@ -50,8 +50,8 @@ def train(model, dataloader, hyperparams):
         for i, snps_array in enumerate(dataloader):
 
             snps_reconstruction, latent_mu, latent_logvar = model(snps_array)
-            loss, rec_loss, kl_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
-            l1_loss, zeros_loss, ones_loss = L1loss(snps_array, snps_reconstruction, partial=True)
+            loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
+            L1_loss, zeros_loss, ones_loss = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
 
             # Backpropagation
             optimizer.zero_grad()
@@ -62,14 +62,14 @@ def train(model, dataloader, hyperparams):
 
             epoch_vae_loss.append(loss.item())
             epoch_rec_loss.append(rec_loss.item())
-            epoch_KL_div.append(kl_div.item())
+            epoch_KL_div.append(KL_div.item())
 
-            epoch_L1_loss.append(l1_loss.item())
+            epoch_L1_loss.append(L1_loss.item())
             epoch_zeros_loss.append(zeros_loss)
             epoch_ones_loss.append(ones_loss)
 
             progress(
-                current=i+1, total=datalen, batch_size=hyperparams['batch_size'], time=time.time()-ini,
+                current=i+1, total=datalen, time=time.time()-ini,
                 vae_loss=epoch_vae_loss, rec_loss=epoch_rec_loss, KL_div=epoch_KL_div,
                 L1_loss=epoch_L1_loss, zeros_loss=epoch_zeros_loss, ones_loss=epoch_ones_loss
             )
@@ -78,17 +78,17 @@ def train(model, dataloader, hyperparams):
         total_rec_loss.append(np.mean(epoch_rec_loss))
         total_KL_div.append(np.mean(epoch_KL_div))
 
-        total_L1_loss.append(np.mean(epoch_l1_loss))
+        total_L1_loss.append(np.mean(epoch_L1_loss))
         total_zeros_loss.append(np.mean(epoch_zeros_loss))
         total_ones_loss.append(np.mean(epoch_ones_loss))
 
-        writer.add_scalar(f'VAE_losses', {
+        writer.add_scalars(f'VAE_losses', {
             'VAE_loss': total_vae_loss[-1],
             'rec_loss': total_rec_loss[-1],
             'KL_div': total_KL_div[-1],
         }, epoch + 1)
 		
-        writer.add_scalar(f'L1_losses', {
+        writer.add_scalars(f'L1_losses', {
             'L1_loss': total_L1_loss[-1],
             'zeros_loss': total_zeros_loss[-1],
             'ones_loss': total_ones_loss[-1],
@@ -96,9 +96,9 @@ def train(model, dataloader, hyperparams):
 
         print(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
         
-        is_best = bool(total_vae_loss[-1].detach().cpu() > best_loss)
+        is_best = bool(total_vae_loss[-1] < best_loss)
         if is_best:
-            best_loss = total_vae_loss[-1].detach().cpu()
+            best_loss = total_vae_loss[-1]
             save_checkpoint({
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
@@ -120,8 +120,9 @@ if __name__ == '__main__':
         'max_limit': 100000,
         'epochs': 80,
         'batch_size': 64,
-        'hidden_dims': 1024,
-        'latent_dims': 512,
+        'hidden_1_dims': 1024,
+        'hidden_2_dims': 512,
+        'latent_dims': 128,
         'lr': 0.01,
         'beta': 1,
         'weight_decay': 0,
@@ -131,7 +132,12 @@ if __name__ == '__main__':
                         batch_size=hyperparams['batch_size'], 
                         max_limit=hyperparams['max_limit'])
 
-    vae = VAEgen(input=hyperparams['max_limit'], hidden=hyperparams['hidden_dims'], latent=hyperparams['latent_dims'])
+    vae = VAEgen(
+        input=hyperparams['max_limit'], 
+        hidden1=hyperparams['hidden_1_dims'], 
+        hidden2=hyperparams['hidden_2_dims'],
+        latent=hyperparams['latent_dims']
+    )
     snps_array = next(iter(dataloader))
     writer.add_graph(vae, snps_array.detach(), verbose = False)
 
