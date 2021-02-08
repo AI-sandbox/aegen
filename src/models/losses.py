@@ -14,7 +14,7 @@ def L1loss(x, o, partial=False, proportion=False):
     loss = F.l1_loss((o > 0.5).float(), x, reduction='sum')
     
     if partial:
-
+        x, o = x.cpu(), o.cpu()
         one_hot_neg = (x - (o.detach() > 0.5).float()).flatten()
         loss_zeros = len(np.where(one_hot_neg == -1)[0])
         loss_ones = len(np.where(one_hot_neg == 1)[0])

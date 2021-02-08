@@ -1,7 +1,7 @@
 import os
 import h5py
 import numpy as np
-from decorators import timer
+from utils.decorators import timer
 
 def encode(catvar):
     """
@@ -124,7 +124,7 @@ if __name__ == '__main__':
     npy2hdf5(
         ipath='data/ancestry_datasets/All_chm_World/all_chm_combined_snps_world_2M_with_labels.npz',
         opath='data/prepared/single_ancestry/data.h5',
-        max_limit=100000,
+        max_limit=1000,
         max_variance=True,
     )
 
