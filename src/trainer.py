@@ -5,6 +5,7 @@ import datetime
 import numpy as np
 from models.VAEgen import VAEgen
 from models.losses import VAEloss, L1loss
+from models.initializers import init_xavier
 from utils.loader import loader 
 from utils.decorators import timer 
 from utils.loggers import progress
@@ -24,6 +25,8 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('USER_P
 
 @timer
 def train(model, tr_loader, vd_loader, hyperparams):
+
+    model.apply(init_xavier)
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'Using device: {device}')
@@ -104,7 +107,7 @@ def train(model, tr_loader, vd_loader, hyperparams):
 
         print(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
 
-        validate(model, vd_loader)
+        validate(model, vd_loader, epoch)
         
         is_best = bool(total_vae_loss[-1] < best_loss)
         if is_best:
@@ -125,7 +128,7 @@ def train(model, tr_loader, vd_loader, hyperparams):
     print(f'Training finished in {time.time() - ini}s.')
 
 @timer
-def validate(model, vd_loader):
+def validate(model, vd_loader, epoch):
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'Using device: {device}')
@@ -159,6 +162,18 @@ def validate(model, vd_loader):
             total_zeros_loss.append(zeros_loss)
             total_ones_loss.append(ones_loss)
 
+            writer.add_scalars(f'VAE_losses', {
+                'VAE_loss_val': total_vae_loss[-1],
+                'rec_loss_val': total_rec_loss[-1],
+                'KL_div_val': total_KL_div[-1],
+            }, epoch + 1)
+            
+            writer.add_scalars(f'L1_losses', {
+                'L1_loss_val': total_L1_loss[-1],
+                'zeros_loss_val': total_zeros_loss[-1],
+                'ones_loss_val': total_ones_loss[-1],
+            }, epoch + 1)
+
         progress(
             current=0, total=0, train=False, bar=False, time=time.time()-ini,
             vae_loss=total_vae_loss, rec_loss=total_rec_loss, KL_div=total_KL_div,
@@ -170,14 +185,14 @@ if __name__ == '__main__':
 
     hyperparams = {
         'max_limit': 1000,
-        'epochs': 200,
-        'batch_size': 64,
+        'epochs': 10000,
+        'batch_size': 2,
         'hidden_1_dims': 512,
         'hidden_2_dims': 256,
         'latent_dims': 128,
         'lr': 0.001,
         'beta': 1,
-        'weight_decay': 0,
+        'weight_decay': 1e-05,
     }
 
     tr_loader = loader(
