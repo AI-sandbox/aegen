@@ -23,7 +23,7 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('USER_P
          print ("=> Loss did not improve")
 
 @timer
-def train(model, tr_loader, val_loader, hyperparams):
+def train(model, tr_loader, vd_loader, hyperparams):
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'Using device: {device}')
@@ -103,6 +103,8 @@ def train(model, tr_loader, val_loader, hyperparams):
         }, epoch + 1)
 
         print(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
+
+        validate(model, vd_loader)
         
         is_best = bool(total_vae_loss[-1] < best_loss)
         if is_best:
@@ -123,7 +125,7 @@ def train(model, tr_loader, val_loader, hyperparams):
     print(f'Training finished in {time.time() - ini}s.')
 
 @timer
-def validate(model, val_loader):
+def validate(model, vd_loader):
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'Using device: {device}')
@@ -140,7 +142,7 @@ def validate(model, val_loader):
     ini = time.time()
     with torch.no_grad():
         print('Validating current model...')
-        for i, snps_array in enumerate(val_loader):
+        for i, snps_array in enumerate(vd_loader):
 
             snps_array = snps_array.to(device)
 
@@ -149,11 +151,11 @@ def validate(model, val_loader):
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
 
-            total_vae_loss.append(loss)
-            total_rec_loss.append(rec_loss)
-            total_KL_div.append(KL_div)
+            total_vae_loss.append(loss.item())
+            total_rec_loss.append(rec_loss.item())
+            total_KL_div.append(KL_div.item())
 
-            total_L1_loss.append(L1_loss)
+            total_L1_loss.append(L1_loss.item())
             total_zeros_loss.append(zeros_loss)
             total_ones_loss.append(ones_loss)
 
@@ -167,20 +169,28 @@ def validate(model, val_loader):
 if __name__ == '__main__':
 
     hyperparams = {
-        'max_limit': 100000,
-        'epochs': 80,
+        'max_limit': 1000,
+        'epochs': 200,
         'batch_size': 64,
-        'hidden_1_dims': 1024,
-        'hidden_2_dims': 512,
+        'hidden_1_dims': 512,
+        'hidden_2_dims': 256,
         'latent_dims': 128,
-        'lr': 0.01,
+        'lr': 0.001,
         'beta': 1,
         'weight_decay': 0,
     }
 
-    dataloader = loader(DATA_PATH = os.path.join(os.environ.get('USER_PATH'), 'data/ancestry_datasets'),
-                        batch_size=hyperparams['batch_size'], 
-                        max_limit=hyperparams['max_limit'])
+    tr_loader = loader(
+        ipath=os.path.join(os.environ.get('USER_PATH'), 'data/prepared/single_ancestry'),
+        batch_size=hyperparams['batch_size'], 
+        split_set='train'
+    )
+
+    vd_loader = loader(
+        ipath=os.path.join(os.environ.get('USER_PATH'), 'data/prepared/single_ancestry'),
+        batch_size=hyperparams['batch_size'], 
+        split_set='valid'
+    )
 
     vae = VAEgen(
         input=hyperparams['max_limit'], 
@@ -188,7 +198,14 @@ if __name__ == '__main__':
         hidden2=hyperparams['hidden_2_dims'],
         latent=hyperparams['latent_dims']
     )
-    snps_array = next(iter(dataloader))
+
+    snps_array = next(iter(tr_loader))
+
     writer.add_graph(vae, snps_array.detach(), verbose = False)
 
-    train(model=vae, tr_loader=dataloader, hyperparams=hyperparams)
+    train(
+        model=vae, 
+        tr_loader=tr_loader, 
+        vd_loader=vd_loader,
+        hyperparams=hyperparams
+    )
