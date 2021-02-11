@@ -2,65 +2,94 @@ import torch
 import numpy as np
 import torch.nn as nn
 
-class Encoder(nn.Module):
-    def __init__(self, input, hidden1, hidden2, latent):
-        super().__init__()
+class FullyConnected(nn.Module):
+    def __init__(self, input, output, dropout=0, normalize=True, activation=None):
+        super().__init__()  
 
-        self.bn_0 = nn.BatchNorm1d(input)
-        self.fc_1 = nn.Linear(input, hidden1)
-        self.bn_1 = nn.BatchNorm1d(hidden1)
-        self.ac_1 = nn.ReLU()
-        self.dp_1 = nn.Dropout(p=0.5)
-        self.fc_2 = nn.Linear(hidden1, hidden2)
-        self.bn_2 = nn.BatchNorm1d(hidden2)
-        self.ac_2 = nn.ReLU()
-        self.dp_2 = nn.Dropout(p=0.5)
-        self.fc_mu = nn.Linear(hidden2, latent)
-        self.bn_mu = nn.BatchNorm1d(latent)
-        self.ac_mu = nn.ReLU()
-        self.fc_logvar = nn.Linear(hidden2, latent)
-        self.bn_logvar = nn.BatchNorm1d(latent)
-        self.ac_logvar = nn.ReLU()
+        modules = []
+        if dropout > 0:
+            modules.append(nn.AlphaDropout(p=dropout))
+        modules.append(nn.Linear(input, output))
+        if normalize:
+            modules.append(nn.BatchNorm1d(output))
+        if activation is not None:
+            if activation == 'ReLU':
+                modules.append(nn.ReLU())
+            elif activation == 'Sigmoid':
+                modules.append(nn.Sigmoid())
+            elif activation == 'Softplus':
+                modules.append(nn.Softplus())
+            elif activation == 'GELU': # GAUSSIAN ERROR LINEAR UNITS
+                modules.append(nn.GELU())
+        self.FC = nn.Sequential(*modules)
 
     def forward(self, x):
-        o = self.bn_0(x)
-        o = self.ac_1(self.bn_1(self.fc_1(x)))
-        o = self.dp_1(o)
-        o = self.ac_2(self.bn_2(self.fc_2(o)))
-        o = self.dp_2(o)
-        o_mu = self.bn_mu(self.fc_mu(o))
-        o_var = self.bn_logvar(self.fc_logvar(o))
+        o = self.FC(x)
+        return o
+
+
+class Encoder(nn.Module):
+    def __init__(self, params):
+        super().__init__()
+
+        modules = []
+        depth = len(params.keys()) - 2
+        for i in range(depth):
+            modules.append(FullyConnected(
+                input=params['input']['size'] if i == 0 else params[f'hidden{i}']['size'],
+                output=params[f'hidden{i + 1}']['size'],
+                dropout=params['input']['dropout'] if i == 0 else params[f'hidden{i}']['dropout'],
+                normalize=params['input']['normalize'] if i == 0 else params[f'hidden{i}']['normalize'],
+                activation=params['input']['activation'] if i == 0 else params[f'hidden{i}']['activation'],
+            ))
+        self.FCs = nn.Sequential(*modules)
+        self.FCmu = FullyConnected(
+            input=params[f'hidden{depth}']['size'],
+            output=params[f'hidden{depth + 1}']['size'],
+            dropout=params[f'hidden{depth}']['dropout'],
+            normalize=params[f'hidden{depth}']['normalize'],
+            activation=params[f'hidden{depth}']['activation'],
+        )
+        self.FClogvar = FullyConnected(
+            input=params[f'hidden{depth}']['size'],
+            output=params[f'hidden{depth + 1}']['size'],
+            dropout=params[f'hidden{depth}']['dropout'],
+            normalize=params[f'hidden{depth}']['normalize'],
+            activation=params[f'hidden{depth}']['activation'],
+        )
+
+    def forward(self, x):
+        o = self.FCs(x)
+        o_mu = self.FCmu(o)
+        o_var = self.FClogvar(o)
         return o_mu, o_var
 
 class Decoder(nn.Module):
-    def __init__(self, latent, hidden2, hidden1, output):
+    def __init__(self, params):
         super().__init__()
-
-        self.fc_1 = nn.Linear(latent, hidden2)
-        self.bn_1 = nn.BatchNorm1d(hidden2)
-        self.ac_1 = nn.ReLU()
-        self.dp_1 = nn.Dropout(p=0.5)
-        self.fc_2 = nn.Linear(hidden2, hidden1)
-        self.bn_2 = nn.BatchNorm1d(hidden1)
-        self.ac_2 = nn.ReLU()
-        self.dp_2 = nn.Dropout(p=0.5)
-        self.fc_3 = nn.Linear(hidden1, output)
-        self.ac_3 = nn.Sigmoid()
+        
+        modules = []
+        depth = len(params.keys())
+        for i in range(1, depth):
+            modules.append(FullyConnected(
+                input=params[f'hidden{depth - i}']['size'],
+                output=params['output']['size'] if i == depth - 1 else params[f'hidden{depth - i - 1}']['size'],
+                dropout=params[f'hidden{depth - i}']['dropout'],
+                normalize=params[f'hidden{depth - i}']['normalize'],
+                activation=params[f'hidden{depth - i}']['activation'],
+            ))
+        self.FCs = nn.Sequential(*modules)
 
     def forward(self, z):
-        o = self.ac_1(self.bn_1(self.fc_1(z)))
-        o = self.dp_1(o)
-        o = self.ac_2(self.bn_2(self.fc_2(o)))
-        o = self.dp_2(o)
-        o = self.ac_3(self.fc_3(o))
+        o = self.FCs(z)
         return o
 
 class VAEgen(nn.Module):
-    def __init__(self, input, hidden1, hidden2, latent):
+    def __init__(self, params):
         super().__init__()
         
-        self.encoder = Encoder(input=input, hidden1=hidden1, hidden2=hidden2, latent=latent)
-        self.decoder = Decoder(latent=latent, hidden2=hidden2, hidden1=hidden1, output=input)
+        self.encoder = Encoder(params=params['encoder'])
+        self.decoder = Decoder(params=params['decoder'])
     
     def reparametrize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
