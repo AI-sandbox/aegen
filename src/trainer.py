@@ -206,13 +206,13 @@ if __name__ == '__main__':
     hyperparams = params['hyperparams']
 
     tr_loader = loader(
-        ipath=os.path.join(os.environ.get('USER_PATH'), 'data/prepared/single_ancestry'),
+        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/prepared/'),
         batch_size=hyperparams['batch_size'], 
         split_set='train'
     )
 
     vd_loader = loader(
-        ipath=os.path.join(os.environ.get('USER_PATH'), 'data/prepared/single_ancestry'),
+        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/prepared/'),
         batch_size=hyperparams['batch_size'], 
         split_set='valid'
     )
