@@ -4,8 +4,8 @@ sbatch <<EOT
 #SBATCH --job-name=VAEgen-$1
 #SBATCH -p gpi.compute
 #SBATCH -c 4
-#SBATCH --gres=gpu:1,gpumem:10G
-#SBATCH --mem=16G
+#SBATCH --gres=gpu:1,gpumem:16G
+#SBATCH --mem=80G
 #SBATCH --time=23:59:59
 #SBATCH -o logs/exp_$1.log
 #SBATCH -e logs/exp_$1.err
