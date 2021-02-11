@@ -1,7 +1,10 @@
 import os
 import time
+import json
+import wandb
 import torch
 import datetime
+import argparse
 import numpy as np
 from models.VAEgen import VAEgen
 from models.losses import VAEloss, L1loss
@@ -11,9 +14,21 @@ from utils.decorators import timer
 from utils.loggers import progress
 from tensorboardX import SummaryWriter
 
-LOGDIR = os.path.join(os.path.join(os.environ.get('USER_PATH'), f"logs/{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"))
-writer = SummaryWriter(log_dir=LOGDIR)
-print(LOGDIR)
+parser = argparse.ArgumentParser()
+parser.add_argument('--params', 
+                        type=str, 
+                        default=os.path.join(os.environ.get('OUT_PATH'), 'params.json'), 
+                        metavar='JSON_FILE',
+                        help='JSON file with parameters and hyperparameters'
+                    )
+# LOGDIR = os.path.join(os.path.join(os.environ.get('OUT_PATH'), f"logs/{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"))
+# writer = SummaryWriter(log_dir=LOGDIR)
+# print(LOGDIR)
+
+
+
+
+
 
 def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('USER_PATH'), 'checkpoints/checkpoint.pt')):
      """Save checkpoint if a new best is achieved"""
@@ -27,6 +42,8 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('USER_P
 def train(model, tr_loader, vd_loader, hyperparams):
 
     model.apply(init_xavier)
+    wandb.init(project='VAEgen')
+    wandb.watch(model)
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'Using device: {device}')
@@ -93,17 +110,17 @@ def train(model, tr_loader, vd_loader, hyperparams):
         total_zeros_loss.append(np.mean(epoch_zeros_loss))
         total_ones_loss.append(np.mean(epoch_ones_loss))
 
-        writer.add_scalars(f'VAE_losses', {
-            'VAE_loss': total_vae_loss[-1],
-            'rec_loss': total_rec_loss[-1],
-            'KL_div': total_KL_div[-1],
-        }, epoch + 1)
+        wandb.log({
+            'tr_VAE_loss': total_vae_loss[-1],
+            'tr_rec_loss': total_rec_loss[-1],
+            'tr_KL_div': total_KL_div[-1],
+        })
 		
-        writer.add_scalars(f'L1_losses', {
-            'L1_loss': total_L1_loss[-1],
-            'zeros_loss': total_zeros_loss[-1],
-            'ones_loss': total_ones_loss[-1],
-        }, epoch + 1)
+        wandb.log({
+            'tr_L1_loss': total_L1_loss[-1],
+            'tr_zeros_loss': total_zeros_loss[-1],
+            'tr_ones_loss': total_ones_loss[-1],
+        })
 
         print(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
 
@@ -162,38 +179,31 @@ def validate(model, vd_loader, epoch):
             total_zeros_loss.append(zeros_loss)
             total_ones_loss.append(ones_loss)
 
-            writer.add_scalars(f'VAE_losses', {
-                'VAE_loss_val': total_vae_loss[-1],
-                'rec_loss_val': total_rec_loss[-1],
-                'KL_div_val': total_KL_div[-1],
-            }, epoch + 1)
+            wandb.log({
+                'vd_VAE_loss': total_vae_loss[-1],
+                'vd_rec_loss': total_rec_loss[-1],
+                'vd_KL_div': total_KL_div[-1],
+            })
             
-            writer.add_scalars(f'L1_losses', {
-                'L1_loss_val': total_L1_loss[-1],
-                'zeros_loss_val': total_zeros_loss[-1],
-                'ones_loss_val': total_ones_loss[-1],
-            }, epoch + 1)
+            wandb.log({
+                'vd_L1_loss': total_L1_loss[-1],
+                'vd_zeros_loss': total_zeros_loss[-1],
+                'vd_ones_loss': total_ones_loss[-1],
+            })
 
         progress(
             current=0, total=0, train=False, bar=False, time=time.time()-ini,
             vae_loss=total_vae_loss, rec_loss=total_rec_loss, KL_div=total_KL_div,
             L1_loss=total_L1_loss, zeros_loss=total_zeros_loss, ones_loss=total_ones_loss
         )
-        
 
 if __name__ == '__main__':
 
-    hyperparams = {
-        'max_limit': 1000,
-        'epochs': 10000,
-        'batch_size': 2,
-        'hidden_1_dims': 512,
-        'hidden_2_dims': 256,
-        'latent_dims': 128,
-        'lr': 0.001,
-        'beta': 1,
-        'weight_decay': 1e-05,
-    }
+    args = parser.parse_args()
+    with open(args.params, 'r') as f:
+        params = json.load(f)
+    model_params = params['model']
+    hyperparams = params['hyperparams']
 
     tr_loader = loader(
         ipath=os.path.join(os.environ.get('USER_PATH'), 'data/prepared/single_ancestry'),
@@ -206,17 +216,12 @@ if __name__ == '__main__':
         batch_size=hyperparams['batch_size'], 
         split_set='valid'
     )
-
-    vae = VAEgen(
-        input=hyperparams['max_limit'], 
-        hidden1=hyperparams['hidden_1_dims'], 
-        hidden2=hyperparams['hidden_2_dims'],
-        latent=hyperparams['latent_dims']
-    )
+    
+    vae = VAEgen(params=model_params)
 
     snps_array = next(iter(tr_loader))
 
-    writer.add_graph(vae, snps_array.detach(), verbose = False)
+    # writer.add_graph(vae, snps_array.detach(), verbose = False)
 
     train(
         model=vae, 
