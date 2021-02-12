@@ -4,6 +4,7 @@ notebooks/*
 ini.sh
 data/*
 */__pycache__/
+wandb/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
