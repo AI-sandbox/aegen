@@ -76,7 +76,7 @@ def splitter(arr, ratios, seed=123):
     return [x.tolist() for x in np.split(arr, ind)][:len(ratios)]
 
 @timer
-def holdout_by_pop(snps, populations, *ratios, seed=123):
+def holdout_by_pop(snps, populations, *ratios, seed=123, verbose=True):
     """
     Creates a holdout partition by equal proportions for each population.
     The ratios for partitions are passed by 'ratios' parameter.
@@ -92,40 +92,48 @@ def holdout_by_pop(snps, populations, *ratios, seed=123):
     
     _r = len(ratios)
     _sets = [None] * _r
+    _pops = [None] * _r
     
     for id, pop in enumerate(np.unique(populations)):
         pop_idx = np.where(np.asarray(populations) == pop)[0]
         _subsets = splitter(pop_idx, ratios, seed=seed)
         
-        print(f'Population #{pop} has {len(pop_idx)} samples.\n'+'-' * 50)
+        if verbose: print(f'Population #{pop} has {len(pop_idx)} samples.\n'+'-' * 50)
         for i in range(_r):
-            print(f'Subsetting {ratios[i] * 100}%, {len(_subsets[i])} samples.')
+            if verbose: print(f'Subsetting {ratios[i] * 100}%, {len(_subsets[i])} samples.')
             if id == 0:
                 _sets[i] = snps[_subsets[i],:]
-                print(' ' * 5 + f'Stored {_sets[i].shape} matrix in set #{i}.')
+                _pops[i] = populations[_subsets[i]]
+                if verbose: print(' ' * 5 + f'Stored {_sets[i].shape} matrix in set #{i}.')
             else:
                 _subset_i = snps[_subsets[i],:]
+                _subpop_i = populations[_subsets[i]]
                 _sets[i] = np.vstack((_sets[i],_subset_i))
-                print(' ' * 5 + f'Stored {_subset_i.shape} matrix in set #{i}.')
-                print(' ' * 5 + f'In total {_sets[i].shape} matrix in set #{i}.')
-        print('\n')
+                _pops[i] = np.append(_pops[i], _subpop_i, axis=0)
+                if verbose: print(' ' * 5 + f'Stored {_subset_i.shape} matrix in set #{i}.')
+                if verbose: print(' ' * 5 + f'In total {_sets[i].shape} matrix in set #{i}.')
+        if verbose: print('\n')
     
-    print('Shuffling each set...\n')
+    if verbose: print('Shuffling each set...\n')
     for i in range(_r):
+        np.random.seed(int(seed))
         np.random.shuffle(_sets[i])
+        np.random.seed(int(seed))
+        np.random.shuffle(_pops[i])
         
-    print('-' * 50 + f'\nTotal counts:\n'+'-' * 50)
-    for i in range(_r):
-        print(f'{_sets[i].shape[0]} samples in set #{i}.')
+    if verbose:
+        print('-' * 50 + f'\nTotal counts:\n'+'-' * 50)
+        for i in range(_r):
+            print(f'{_sets[i].shape[0]} samples in set #{i}.')
     
-    return _sets
+    return _sets, _pops
 
 if __name__ == '__main__':
     npy2hdf5(
         ipath='data/ancestry_datasets/All_chm_World/all_chm_combined_snps_world_2M_with_labels.npz',
         opath='data/prepared/single_ancestry/data.h5',
-        max_limit=1000,
-        max_variance=True,
+        max_limit=2000,
+        max_variance=False,
     )
 
     h5f = h5py.File(os.path.join(os.environ.get('USER_PATH'), 'data/prepared/single_ancestry/data.h5'), 'r')
@@ -136,13 +144,13 @@ if __name__ == '__main__':
     train, valid = holdout_by_pop(snps, populations, 0.8, 0.2, seed=123)
 
     print('Storing train.hdf5...')
-    h5f = h5py.File(os.path.join(os.environ.get('USER_PATH'), 'data/prepared/single_ancestry/train.h5'), 'w')
+    h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'), 'data/prepared/train.h5'), 'w')
     h5f.create_dataset('train', data=train)
     h5f.close()
     print('Done.\n')
 
     print('Storing valid.hdf5...')
-    h5f = h5py.File(os.path.join(os.environ.get('USER_PATH'), 'data/prepared/single_ancestry/valid.h5'), 'w')
+    h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'), 'data/prepared/valid.h5'), 'w')
     h5f.create_dataset('valid', data=valid)
     h5f.close()
     print('Done.\n')
