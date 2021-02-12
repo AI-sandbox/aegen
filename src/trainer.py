@@ -214,13 +214,13 @@ if __name__ == '__main__':
     hyperparams = params['hyperparams']
     
     tr_loader = loader(
-        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/prepared/'),
+        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/chr22/prepared'),
         batch_size=hyperparams['batch_size'], 
         split_set='train'
     )
 
     vd_loader = loader(
-        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/prepared/'),
+        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/chr22/prepared'),
         batch_size=hyperparams['batch_size'], 
         split_set='valid'
     )
