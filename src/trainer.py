@@ -12,7 +12,6 @@ from models.initializers import init_xavier
 from utils.loader import loader 
 from utils.decorators import timer 
 from utils.loggers import progress
-from tensorboardX import SummaryWriter
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--params', 
@@ -21,14 +20,18 @@ parser.add_argument('--params',
                         metavar='JSON_FILE',
                         help='JSON file with parameters and hyperparameters'
                     )
-# LOGDIR = os.path.join(os.path.join(os.environ.get('OUT_PATH'), f"logs/{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"))
-# writer = SummaryWriter(log_dir=LOGDIR)
-# print(LOGDIR)
-
-
-
-
-
+parser.add_argument('--experiment', 
+                        type=str, 
+                        default=None, 
+                        metavar='SUMMARY',
+                        help='Summary of the experiment'
+                    )
+parser.add_argument('--verbose', 
+                        type=bool, 
+                        default=False, 
+                        metavar='BOOL',
+                        help='Verbose output indicator'
+                    )
 
 def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('USER_PATH'), 'checkpoints/checkpoint.pt')):
      """Save checkpoint if a new best is achieved"""
@@ -39,10 +42,13 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('USER_P
          print ("=> Loss did not improve")
 
 @timer
-def train(model, tr_loader, vd_loader, hyperparams):
+def train(model, tr_loader, vd_loader, hyperparams, summary=None, verbose=False):
 
     model.apply(init_xavier)
     wandb.init(project='VAEgen')
+    wandb.run.name = summary
+    wandb.run.save()
+
     wandb.watch(model)
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -96,11 +102,12 @@ def train(model, tr_loader, vd_loader, hyperparams):
             epoch_zeros_loss.append(zeros_loss)
             epoch_ones_loss.append(ones_loss)
 
-            progress(
-                current=i+1, total=datalen, time=time.time()-ini,
-                vae_loss=epoch_vae_loss, rec_loss=epoch_rec_loss, KL_div=epoch_KL_div,
-                L1_loss=epoch_L1_loss, zeros_loss=epoch_zeros_loss, ones_loss=epoch_ones_loss
-            )
+            if not verbose:
+                progress(
+                    current=i+1, total=datalen, time=time.time()-ini,
+                    vae_loss=epoch_vae_loss, rec_loss=epoch_rec_loss, KL_div=epoch_KL_div,
+                    L1_loss=epoch_L1_loss, zeros_loss=epoch_zeros_loss, ones_loss=epoch_ones_loss
+                )
 
         total_vae_loss.append(np.mean(epoch_vae_loss))
         total_rec_loss.append(np.mean(epoch_rec_loss))
@@ -124,7 +131,7 @@ def train(model, tr_loader, vd_loader, hyperparams):
 
         print(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
 
-        validate(model, vd_loader, epoch)
+        validate(model, vd_loader, epoch, verbose)
         
         is_best = bool(total_vae_loss[-1] < best_loss)
         if is_best:
@@ -145,7 +152,7 @@ def train(model, tr_loader, vd_loader, hyperparams):
     print(f'Training finished in {time.time() - ini}s.')
 
 @timer
-def validate(model, vd_loader, epoch):
+def validate(model, vd_loader, epoch, verbose=False):
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'Using device: {device}')
@@ -191,11 +198,12 @@ def validate(model, vd_loader, epoch):
                 'vd_ones_loss': total_ones_loss[-1],
             })
 
-        progress(
-            current=0, total=0, train=False, bar=False, time=time.time()-ini,
-            vae_loss=total_vae_loss, rec_loss=total_rec_loss, KL_div=total_KL_div,
-            L1_loss=total_L1_loss, zeros_loss=total_zeros_loss, ones_loss=total_ones_loss
-        )
+        if not verbose:
+            progress(
+                current=0, total=0, train=False, bar=False, time=time.time()-ini,
+                vae_loss=total_vae_loss, rec_loss=total_rec_loss, KL_div=total_KL_div,
+                L1_loss=total_L1_loss, zeros_loss=total_zeros_loss, ones_loss=total_ones_loss
+            )
 
 if __name__ == '__main__':
 
@@ -204,7 +212,7 @@ if __name__ == '__main__':
         params = json.load(f)
     model_params = params['model']
     hyperparams = params['hyperparams']
-
+    
     tr_loader = loader(
         ipath=os.path.join(os.environ.get('IN_PATH'), 'data/prepared/'),
         batch_size=hyperparams['batch_size'], 
@@ -219,13 +227,12 @@ if __name__ == '__main__':
     
     vae = VAEgen(params=model_params)
 
-    snps_array = next(iter(tr_loader))
-
-    # writer.add_graph(vae, snps_array.detach(), verbose = False)
-
     train(
         model=vae, 
         tr_loader=tr_loader, 
         vd_loader=vd_loader,
-        hyperparams=hyperparams
+        hyperparams=hyperparams,
+        summary=args.experiment,
+        verbose=bool(args.verbose),
     )
+    
