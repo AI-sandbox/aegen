@@ -15,8 +15,8 @@ class SNPs(Dataset):
             split_set: to load.
         """
 
-        h5f = h5py.File(os.path.join(os.environ.get('USER_PATH'), f'{ipath}/{split_set}.h5'), 'r')
-        self.snps = h5f[split_set][:].astype(float)
+        h5f = h5py.File(os.path.join(ipath, f'{split_set}5K.h5'), 'r')
+        self.snps = h5f['snps'][:].astype(float)
         h5f.close()
 
         print(self.snps.shape)
@@ -39,7 +39,7 @@ def loader(ipath, batch_size, split_set='train'):
 
 if __name__ == '__main__':
     data = loader(
-        ipath=os.path.join(os.environ.get('USER_PATH'), 'data/prepared/single_ancestry'),
+        ipath=os.path.join(os.environ.get('USER_PATH'), 'data/chr22/prepared'),
         batch_size=64, 
         split_set='train'
     )
