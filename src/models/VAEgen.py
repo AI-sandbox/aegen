@@ -7,7 +7,7 @@ class FullyConnected(nn.Module):
         super().__init__()  
 
         modules = []
-        if dropout > 0:
+        if dropout is not None and dropout > 0:
             modules.append(nn.AlphaDropout(p=dropout))
         modules.append(nn.Linear(input, output))
         if normalize:
@@ -44,18 +44,18 @@ class Encoder(nn.Module):
             ))
         self.FCs = nn.Sequential(*modules)
         self.FCmu = FullyConnected(
-            input=params[f'hidden{depth}']['size'],
+            input=params['input']['size'] if depth == 0 else params[f'hidden{depth}']['size'],
             output=params[f'hidden{depth + 1}']['size'],
-            dropout=params[f'hidden{depth}']['dropout'],
-            normalize=params[f'hidden{depth}']['normalize'],
-            activation=params[f'hidden{depth}']['activation'],
+            dropout=params['input']['dropout'] if depth == 0 else params[f'hidden{depth}']['dropout'],
+            normalize=params['input']['normalize'] if depth == 0 else params[f'hidden{depth}']['normalize'],
+            activation=params['input']['activation'] if depth == 0 else params[f'hidden{depth}']['activation'],
         )
         self.FClogvar = FullyConnected(
-            input=params[f'hidden{depth}']['size'],
+            input=params['input']['size'] if depth == 0 else params[f'hidden{depth}']['size'],
             output=params[f'hidden{depth + 1}']['size'],
-            dropout=params[f'hidden{depth}']['dropout'],
-            normalize=params[f'hidden{depth}']['normalize'],
-            activation=params[f'hidden{depth}']['activation'],
+            dropout=params['input']['dropout'] if depth == 0 else params[f'hidden{depth}']['dropout'],
+            normalize=params['input']['normalize'] if depth == 0 else params[f'hidden{depth}']['normalize'],
+            activation=params['input']['activation'] if depth == 0 else params[f'hidden{depth}']['activation'],
         )
 
     def forward(self, x):
