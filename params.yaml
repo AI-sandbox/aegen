@@ -1,0 +1,40 @@
+model: 
+  encoder:
+    input:
+      size: 10000
+      dropout: 0
+      normalize: true
+      activation: ReLU
+    hidden1: 
+      size: 256
+      dropout: null
+      normalize: true
+      activation: null
+    hidden2: 
+      size: 2
+      dropout: null
+      normalize: null
+      activation: null
+  decoder: 
+    hidden2:
+      size: 2
+      dropout: 0
+      normalize: true
+      activation: ReLU
+    hidden1:
+      size: 256
+      dropout: 0
+      normalize: true
+      activation: Sigmoid
+    output:
+      size: 10000
+      dropout: null
+      normalize: null
+      activation: null
+
+hyperparams:
+  epochs: 500
+  batch_size: 128
+  lr: 0.00001
+  beta: 1
+  weight_decay: 0.000001
