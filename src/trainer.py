@@ -85,6 +85,7 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
 
     total_vae_loss, total_rec_loss, total_KL_div  = [], [], []
     total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
+    total_compression_ratio = []
 
     print('Training loop starting now ...')
     for epoch in range(hyperparams['epochs']):
@@ -93,6 +94,7 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
 
         epoch_vae_loss, epoch_rec_loss, epoch_KL_div  = [], [], []
         epoch_L1_loss, epoch_zeros_loss, epoch_ones_loss = [], [], []
+        epoch_compression_ratio = []
         
         for i, batch in enumerate(tr_loader):
 
@@ -100,7 +102,7 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
 
             snps_reconstruction, latent_mu, latent_logvar = model(snps_array)
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
-            L1_loss, zeros_loss, ones_loss = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
+            L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
 
             # Backpropagation
             optimizer.zero_grad()
@@ -117,11 +119,14 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
             epoch_zeros_loss.append(zeros_loss)
             epoch_ones_loss.append(ones_loss)
 
+            epoch_compression_ratio.append(compression_ratio)
+
             if not verbose:
                 progress(
                     current=i+1, total=datalen, time=time.time()-ini,
                     vae_loss=epoch_vae_loss, rec_loss=epoch_rec_loss, KL_div=epoch_KL_div,
-                    L1_loss=epoch_L1_loss, zeros_loss=epoch_zeros_loss, ones_loss=epoch_ones_loss
+                    L1_loss=epoch_L1_loss, zeros_loss=epoch_zeros_loss, ones_loss=epoch_ones_loss,
+                    compression_ratio=epoch_compression_ratio
                 )
 
         total_vae_loss.append(np.mean(epoch_vae_loss[-slide:]))
@@ -131,6 +136,8 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
         total_L1_loss.append(np.mean(epoch_L1_loss[-slide:]))
         total_zeros_loss.append(np.mean(epoch_zeros_loss[-slide:]))
         total_ones_loss.append(np.mean(epoch_ones_loss[-slide:]))
+
+        total_compression_ratio.append(np.mean(epoch_compression_ratio[-slide:]))
 
         wandb.log({
             'tr_VAE_loss': total_vae_loss[-1],
@@ -144,11 +151,15 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
             'tr_ones_loss': total_ones_loss[-1],
         })
 
+        wandb.log({
+            'compression_ratio': total_compression_ratio[-1],
+        })
+
         print(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
 
         validate(model, vd_loader, epoch, verbose)
 
-        if (ts_loader is not None) and (epoch % 10 == 0): #and (epoch != 0):
+        if (ts_loader is not None) and (epoch % 50 == 0): #and (epoch != 0):
             print('Testing...')
             test(model, ts_loader, epoch)
         
@@ -166,6 +177,7 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
                 'l1_losses': total_L1_loss,
                 'zeros_losses': total_zeros_loss,
                 'ones_losses': total_ones_loss,
+                'compression_ratio': total_compression_ratio
             }, is_best = is_best, filename=os.path.join(os.environ.get('USER_PATH'), f'checkpoints/checkpoint_VAE_{num}.pt'))
     
     print(f'Training finished in {time.time() - ini}s.')
@@ -184,6 +196,7 @@ def validate(model, vd_loader, epoch, verbose=False):
 
     total_vae_loss, total_rec_loss, total_KL_div  = [], [], []
     total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
+    total_compression_ratio = []
     
     ini = time.time()
     with torch.no_grad():
@@ -195,7 +208,7 @@ def validate(model, vd_loader, epoch, verbose=False):
             snps_reconstruction, latent_mu, latent_logvar = model(snps_array)
 
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
-            L1_loss, zeros_loss, ones_loss = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
+            L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
 
             total_vae_loss.append(loss.item())
             total_rec_loss.append(rec_loss.item())
@@ -204,6 +217,8 @@ def validate(model, vd_loader, epoch, verbose=False):
             total_L1_loss.append(L1_loss.item())
             total_zeros_loss.append(zeros_loss)
             total_ones_loss.append(ones_loss)
+
+            total_compression_ratio.append(compression_ratio)
 
             wandb.log({
                 'vd_VAE_loss': total_vae_loss[-1],
@@ -217,11 +232,16 @@ def validate(model, vd_loader, epoch, verbose=False):
                 'vd_ones_loss': total_ones_loss[-1],
             })
 
+            wandb.log({
+                'vd_compression_ratio': total_compression_ratio[-1],
+            })
+
         if not verbose:
             progress(
                 current=0, total=0, train=False, bar=False, time=time.time()-ini,
                 vae_loss=total_vae_loss, rec_loss=total_rec_loss, KL_div=total_KL_div,
-                L1_loss=total_L1_loss, zeros_loss=total_zeros_loss, ones_loss=total_ones_loss
+                L1_loss=total_L1_loss, zeros_loss=total_zeros_loss, ones_loss=total_ones_loss,
+                compression_ratio=total_compression_ratio
             )
 
 @timer
