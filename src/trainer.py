@@ -119,7 +119,7 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
             epoch_zeros_loss.append(zeros_loss)
             epoch_ones_loss.append(ones_loss)
 
-            epoch_compression_ratio.append(compression_ratio)
+            epoch_compression_ratio.append(compression_ratio.item())
 
             if not verbose:
                 progress(
@@ -218,7 +218,7 @@ def validate(model, vd_loader, epoch, verbose=False):
             total_zeros_loss.append(zeros_loss)
             total_ones_loss.append(ones_loss)
 
-            total_compression_ratio.append(compression_ratio)
+            total_compression_ratio.append(compression_ratio.item())
 
             wandb.log({
                 'vd_VAE_loss': total_vae_loss[-1],

@@ -19,7 +19,7 @@ def L1loss(x, o, partial=False, proportion=False):
         loss_zeros = len(np.where(one_hot_neg == -1)[0])
         loss_ones = len(np.where(one_hot_neg == 1)[0])
         ones = len(np.where(x == 1)[0])
-        compression_ratio = loss / ones * 100
+        compression_ratio = loss / ones
 
         if proportion: 
             zeros = len(np.where(x == 0)[0])
@@ -28,7 +28,6 @@ def L1loss(x, o, partial=False, proportion=False):
             acc_zeros = loss_zeros / zeros * 100
             acc_ones = loss_ones / ones * 100
             
-
             return acc_total, acc_zeros, acc_ones, compression_ratio
         
         return loss, loss_zeros, loss_ones, compression_ratio
