@@ -46,7 +46,7 @@ def latentPCA(original, latent, labels):
     ax[0].legend(handles=patches, bbox_to_anchor=(0. ,0.80 ,1.,0.3),loc=10,ncol=7,)
     ax[0].spines['right'].set_visible(False)
     ax[0].spines['top'].set_visible(False)
-    ax[0].set_title(f'(Original) PCA with {projected_original.shape[1]}K SNPs')
+    ax[0].set_title(f'(Original) PCA with {original.shape[1]}K SNPs')
 
     ax[1].scatter(projected_latent[:,0], projected_latent[:,1], c=[colors[x] for x in labels], marker='.')
     ax[1].set_xlabel('PC1')
@@ -57,7 +57,7 @@ def latentPCA(original, latent, labels):
     ax[1].legend(handles=patches, bbox_to_anchor=(0. ,0.80 ,1.,0.3),loc=10,ncol=7,)
     ax[1].spines['right'].set_visible(False)
     ax[1].spines['top'].set_visible(False)
-    ax[1].set_title(f'Latent space of VAE({projected_latent.shape[1]}) projected with PCA')
+    ax[1].set_title(f'Latent space of VAE({latent.shape[1]}) projected with PCA')
     
     return wandb.Image(fig)
 
