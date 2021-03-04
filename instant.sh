@@ -15,10 +15,12 @@ if [[ -z $summary ]]; then echo "Missing experiment summary."; exit 1; fi
 
 echo "Executing instant experiment ($summary)(#$exp)"
 mkdir -p $OUT_PATH/exp_$exp
-cp params.json $OUT_PATH/exp_$exp/
-if srun -u --gres=gpu:1,gpumem:16G -p gpi.compute -c 4 --time 23:59:59 --mem 80GB python3 src/trainer.py \
-    --params $OUT_PATH/exp_$1/params.json \
+cp params.yaml $OUT_PATH/exp_$exp/
+if srun -u --gres=gpu:1,gpumem:12G -p gpi.develop -c 4 --time 01:59:59 --mem 32GB python3 src/trainer.py \
+    --params $OUT_PATH/exp_$exp/params.yaml \
     --experiment "$summary" \
-    --verbose $verbose; then
+    --verbose $verbose \
+    --num $exp \
+    --evolution True; then
     echo "Success!"
 else echo 'Fail!'; fi
