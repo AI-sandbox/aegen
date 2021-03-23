@@ -7,6 +7,7 @@ data/*
 wandb/*
 checkpoints/*
 src/wandb/*
+scripts/wandb/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
