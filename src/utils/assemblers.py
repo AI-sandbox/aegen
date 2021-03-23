@@ -1,7 +1,13 @@
 import os
+import gc
+import glob
 import h5py
+import logging
 import numpy as np
 from utils.decorators import timer
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 def encode(catvar):
     """
@@ -127,6 +133,40 @@ def holdout_by_pop(snps, populations, *ratios, seed=123, verbose=True):
             print(f'{_sets[i].shape[0]} samples in set #{i}.')
     
     return _sets, _pops
+
+def get_snps_by_pop(pop, split, max_size=5000):
+    log.info(f'Fetching SNPs for population {pop}')
+    for i, snps_arr in enumerate(glob.glob(os.path.join(os.environ.get('IN_PATH'), f'data/chr22/prepared/{split}/{pop}/generations/{pop}_gen_*.npy'))):
+        aux = np.load(snps_arr, mmap_mode='r')[:,:max_size]
+        if i == 0:
+            arr = np.empty((0, aux.shape[1]), int)
+        arr = np.vstack((arr, aux))
+        del aux
+        gc.collect()
+    log.info('Done.')
+    return arr
+
+def create_dataset(max_size=5000, seed=123):
+    pops = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
+    for split in ['train', 'valid', 'test']:
+        for i in range(1, len(pops)):
+            if i == 1:
+                pop0, pop1 = get_snps_by_pop(pops[0], split=split, max_size=max_size), get_snps_by_pop(pops[1], split=split, max_size=max_size)
+                X, Y = np.vstack((pop0, pop1)), np.concatenate((np.array([0]*len(pop0)), np.array([1]*len(pop1))), axis=0)
+            else:
+                popI = get_snps_by_pop(pops[i], split=split, max_size=max_size)
+                X, Y = np.vstack((X, popI)), np.concatenate((Y, np.array([i]*len(popI))), axis=0)
+            assert len(X) == len(Y)
+        np.random.seed(seed)
+        idxs = np.arange(len(X))
+        np.random.shuffle(idxs)
+        X, Y = X[idxs], Y[idxs]
+        log.info(f'Storing {split} hdf5...')
+        h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/chr22/prepared/{split}/{split}{int(max_size/1000)}K.h5'), 'w')
+        h5f.create_dataset('snps', data=X)
+        h5f.create_dataset('populations', data=Y)
+        h5f.close()
+        log.info('Done.\n')
 
 if __name__ == '__main__':
     npy2hdf5(
