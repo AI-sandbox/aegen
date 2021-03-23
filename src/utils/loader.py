@@ -16,7 +16,7 @@ class SNPs(Dataset):
             ksize: size of SNP arrays in terms of thousands.
         """
 
-        h5f = h5py.File(os.path.join(ipath, f'{split_set}{ksize}K.h5'), 'r')
+        h5f = h5py.File(os.path.join(ipath, f'{split_set}/{split_set}{ksize}K.h5'), 'r')
         self.snps = h5f['snps'][:].astype(float)
         self.populations = h5f['populations'][:].astype(int)
         h5f.close()
