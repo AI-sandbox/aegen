@@ -6,7 +6,9 @@ import wandb
 import torch
 import datetime
 import argparse
+import logging
 import numpy as np
+import torch.nn as nn
 import matplotlib.pyplot as plt
 from models.VAEgen import VAEgen
 from models.losses import VAEloss, L1loss
@@ -14,6 +16,9 @@ from models.initializers import init_xavier
 from utils.loader import loader 
 from utils.decorators import timer 
 from utils.loggers import progress, latentPCA
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--params', 
@@ -66,16 +71,11 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
 
     wandb.watch(model)
 
-    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f'Using device: {device}')
-
-    model.to(device)
-
     optimizer = torch.optim.Adam(params=model.parameters(), lr=hyperparams['lr'], weight_decay=hyperparams['weight_decay'])
 
     # This is the number of parameters used in the model
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f'Number of model parameters: {num_params}')
+    log.info(f'Number of model parameters: {num_params}')
 
     # Set to training mode
     model.train()
@@ -87,7 +87,7 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
     total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
     total_compression_ratio = []
 
-    print('Training loop starting now ...')
+    log.info('Training loop starting now ...')
     for epoch in range(hyperparams['epochs']):
         
         ini = time.time()
@@ -121,7 +121,7 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
 
             epoch_compression_ratio.append(compression_ratio.item())
 
-            if not verbose:
+            if verbose:
                 progress(
                     current=i+1, total=datalen, time=time.time()-ini,
                     vae_loss=epoch_vae_loss, rec_loss=epoch_rec_loss, KL_div=epoch_KL_div,
@@ -155,11 +155,11 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
             'compression_ratio': total_compression_ratio[-1],
         })
 
-        print(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
+        log.info(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
 
         validate(model, vd_loader, epoch, verbose)
 
-        if (ts_loader is not None) and (epoch % 50 == 0): #and (epoch != 0):
+        if (ts_loader is not None) and (epoch % 100 == 0): #and (epoch != 0):
             print('Testing...')
             test(model, ts_loader, epoch)
         
@@ -184,11 +184,6 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
 
 @timer
 def validate(model, vd_loader, epoch, verbose=False):
-
-    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f'Using device: {device}')
-
-    model.to(device)
 
     # Set to evaluation mode
     model.eval()
@@ -236,7 +231,7 @@ def validate(model, vd_loader, epoch, verbose=False):
                 'vd_compression_ratio': total_compression_ratio[-1],
             })
 
-        if not verbose:
+        if verbose:
             progress(
                 current=0, total=0, train=False, bar=False, time=time.time()-ini,
                 vae_loss=total_vae_loss, rec_loss=total_rec_loss, KL_div=total_KL_div,
@@ -247,18 +242,13 @@ def validate(model, vd_loader, epoch, verbose=False):
 @timer
 def test(model, ts_loader, epoch):
 
-    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f'Using device: {device}')
-
-    model.to(device)
-
     # Set to evaluation mode
     model.eval()
 
-    original, latent, labels = np.empty((0, model.encoder.FCs[0].FC[0].in_features), int), np.empty((0, model.decoder.FCs[0].FC[0].in_features), int), torch.Tensor([])
+    original, latent, labels = np.empty((0, model.module.encoder.FCs[0].FC[0].in_features), int), np.empty((0, model.module.decoder.FCs[0].FC[0].in_features), int), torch.Tensor([])
     for i, batch in enumerate(ts_loader):
         original = np.vstack((original, batch[0]))
-        mu, _ = vae.encoder(batch[0].to(device))
+        mu, _ = model.module.encoder(batch[0].to(device)) # module to parallelize
         latent = np.vstack((latent, mu.detach().cpu().squeeze(0)))
         labels = torch.cat((labels, batch[1]))
 
@@ -275,6 +265,7 @@ if __name__ == '__main__':
     hyperparams = params['hyperparams']
     ksize=int(model_params['encoder']['input']['size'] / 1000)
     
+    log.info('Loading data...')
     tr_loader = loader(
         ipath=os.path.join(os.environ.get('IN_PATH'), 'data/chr22/prepared'),
         batch_size=hyperparams['batch_size'], 
@@ -295,8 +286,16 @@ if __name__ == '__main__':
         split_set='test',
         ksize=ksize
     ) if bool(args.evolution) else None
+    log.info('Data loaded ++')
     
     vae = VAEgen(params=model_params)
+
+    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    log.info(f'Using device: {device}')
+    if torch.cuda.device_count() > 1:
+        log.info(f"Using {torch.cuda.device_count()} GPUs")
+        vae = nn.DataParallel(vae)
+    vae.to(device)
 
     train(
         model=vae, 
