@@ -12,11 +12,12 @@ done
 if [[ -z $cluster ]]; then cluster=$CLUSTER; fi
 if [[ -z $individuals ]]; then echo "Missing individuals parameters."; exit 1; fi
 echo "[$CLUSTER] Generating datasets with $individuals individuals"
-cd $USER_PATH/src
 if [ "$cluster" == "SHERLOCK" ]; then
 source ini.sh
+cd $USER_PATH/src
 sbatch <<EOT
 #!/bin/sh
+#SBATCH --job-name=cVAEgen$1
 #SBATCH -p gpu
 #SBATCH -c 10
 #SBATCH -G 1
