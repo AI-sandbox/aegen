@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from utils.decorators import timer 
 
 class SNPs(Dataset):
-    def __init__(self, ipath, split_set='train', ksize=5):
+    def __init__(self, ipath, split_set='train', ksize=5, only=None):
         """
         Inputs:
             split_set: to load.
@@ -20,6 +20,10 @@ class SNPs(Dataset):
         self.snps = h5f['snps'][:].astype(float)
         self.populations = h5f['populations'][:].astype(int)
         h5f.close()
+
+        if only is not None:
+            pop_idx = np.where(np.asarray(self.populations) == only)[0]
+            self.snps = self.snps[pop_idx,:]
 
     def __len__(self):
         return self.snps.shape[0]
@@ -33,8 +37,8 @@ class SNPs(Dataset):
         return (snps_array, label)
 
 @timer
-def loader(ipath, batch_size, split_set='train', ksize=5):
-    dataset = SNPs(ipath=ipath, split_set=split_set, ksize=ksize)
+def loader(ipath, batch_size, split_set='train', ksize=5, only=None):
+    dataset = SNPs(ipath=ipath, split_set=split_set, ksize=ksize, only=only)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
     return dataloader
 
