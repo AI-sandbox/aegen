@@ -138,6 +138,7 @@ def get_snps_by_pop(pop, split, max_size=5000):
     log.info(f'Fetching SNPs for population {pop}')
     for i, snps_arr in enumerate(glob.glob(os.path.join(os.environ.get('IN_PATH'), f'data/chr22/prepared/{split}/{pop}/generations/{pop}_gen_*.npy'))):
         aux = np.load(snps_arr, mmap_mode='r')[:,:max_size]
+        log.info(f'Generation {i+1} has {aux.shape[0]} individuals')
         if i == 0:
             arr = np.empty((0, aux.shape[1]), int)
         arr = np.vstack((arr, aux))
@@ -161,7 +162,7 @@ def create_dataset(max_size=5000, seed=123):
         idxs = np.arange(len(X))
         np.random.shuffle(idxs)
         X, Y = X[idxs], Y[idxs]
-        log.info(f'Storing {split} hdf5...')
+        log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
         h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/chr22/prepared/{split}/{split}{int(max_size/1000)}K.h5'), 'w')
         h5f.create_dataset('snps', data=X)
         h5f.create_dataset('populations', data=Y)
