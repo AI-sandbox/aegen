@@ -1,7 +1,6 @@
 # Custom
 logs/*
 notebooks/*
-ini.sh
 data/*
 */__pycache__/
 wandb/*
