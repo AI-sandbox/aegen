@@ -178,7 +178,7 @@ def train(model, tr_loader, vd_loader, hyperparams, summary=None, num=0, verbose
                 'zeros_losses': total_zeros_loss,
                 'ones_losses': total_ones_loss,
                 'compression_ratio': total_compression_ratio
-            }, is_best = is_best, filename=os.path.join(os.environ.get('USER_PATH'), f'checkpoints/checkpoint_VAE_{num}.pt'))
+            }, is_best = is_best, filename=os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/checkpoint_VAE_{num}.pt'))
     
     print(f'Training finished in {time.time() - ini}s.')
 
@@ -245,12 +245,12 @@ def test(model, ts_loader, epoch):
     # Set to evaluation mode
     model.eval()
 
-    original, latent, labels = np.empty((0, model.module.encoder.FCs[0].FC[0].in_features), int), np.empty((0, model.module.decoder.FCs[0].FC[0].in_features), int), torch.Tensor([])
+    original, latent, labels = np.empty((0, model.encoder.FCs[0].FC[0].in_features), int), np.empty((0, model.decoder.FCs[0].FC[0].in_features), int), torch.Tensor([])
     for i, batch in enumerate(ts_loader):
         original = np.vstack((original, batch[0]))
-        mu, _ = model.module.encoder(batch[0].to(device)) # module to parallelize
-        latent = np.vstack((latent, mu.detach().cpu().squeeze(0)))
-        labels = torch.cat((labels, batch[1]))
+        mu, _ = model.encoder(batch[0].to(device)) # module to parallelize
+        latent = np.vstack((latent, mu.detach().cpu().squeeze(0))).astype(float)
+        labels = torch.cat((labels, batch[1].float()))
 
     fig = latentPCA(original, latent, labels.int())
     wandb.log({f"Latent space at epoch {epoch}": fig})
