@@ -1,9 +1,15 @@
+import os
 import wandb
+import torch
 import numpy as np
 import seaborn as sns
+import logging
 from sklearn.decomposition import PCA
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 def progress(current, total, train=True, bar=True, time=None, **kwargs):
 
@@ -26,33 +32,34 @@ def progress(current, total, train=True, bar=True, time=None, **kwargs):
     
     print(f'{indicator} {bar_progress} {metrics}')
 
-def latentPCA(original, latent, labels):
+def latentPCA(original, latent, labels, only=None):
 
-    pops = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
-    colors = ['#d23be7','#4355db','#34bbe6','#49da9a','#49da9a','#f7d038','#f7d038']
-    colors = sns.color_palette("rainbow", len(pops))
+    populations = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
+    colors = sns.color_palette("rainbow", len(populations))
+    pops = dict(zip(populations, colors))
+    pop_mapper = dict(zip(np.arange(0, len(pops.keys())), pops.keys()))
 
     pca = PCA(n_components=2)
     projected_original = pca.fit_transform(original)
     projected_latent = pca.fit_transform(latent)
 
     fig, ax = plt.subplots(1,2, figsize=(20, 8))
-    ax[0].scatter(projected_original[:,0], projected_original[:,1], c=[colors[x] for x in labels], marker='.')
+    ax[0].scatter(projected_original[:,0], projected_original[:,1], c=[colors[x] if only is None else pops[pop_mapper[only]] for x in labels] , marker='.')
     ax[0].set_xlabel('PC1')
     ax[0].set_ylabel('PC2')
     patches = []
-    for i, pop in enumerate(pops):
+    for i, pop in enumerate(pops.keys()):
         patches.append(mpatches.Patch(color=colors[i], label=pop))
     ax[0].legend(handles=patches, bbox_to_anchor=(0. ,0.80 ,1.,0.3),loc=10,ncol=7,)
     ax[0].spines['right'].set_visible(False)
     ax[0].spines['top'].set_visible(False)
     ax[0].set_title(f'(Original) PCA with {original.shape[1]}K SNPs')
 
-    ax[1].scatter(projected_latent[:,0], projected_latent[:,1], c=[colors[x] for x in labels], marker='.')
+    ax[1].scatter(projected_latent[:,0], projected_latent[:,1], c=[colors[x] if only is None else pops[pop_mapper[only]] for x in labels], marker='.')
     ax[1].set_xlabel('PC1')
     ax[1].set_ylabel('PC2')
     patches = []
-    for i, pop in enumerate(pops):
+    for i, pop in enumerate(pops.keys()):
         patches.append(mpatches.Patch(color=colors[i], label=pop))
     ax[1].legend(handles=patches, bbox_to_anchor=(0. ,0.80 ,1.,0.3),loc=10,ncol=7,)
     ax[1].spines['right'].set_visible(False)
@@ -61,4 +68,17 @@ def latentPCA(original, latent, labels):
     
     return wandb.Image(fig)
 
-    
+def saver(obj, num, state):
+
+    if obj == 'model':
+        log.info('Storing best weights.')
+        torch.save(state, os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/VAEgen_weights_{num}.pt'))
+    elif obj == 'optimizer':
+        log.info('Storing optimizer state.')
+        torch.save(state, os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/OPT_state_{num}.pt'))
+    elif obj == 'stats':
+        log.info('Storing stats.')
+        torch.save(state, os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/VAEgen_stats_{num}.pt'))
+    else: 
+        log.error('Unknown object to store. Exiting...')
+        exit(1)

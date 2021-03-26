@@ -61,7 +61,7 @@ sbatch <<EOT
 #SBATCH --job-name=VAEgen$experiment
 #SBATCH -p gpi.compute
 #SBATCH -c 4
-#SBATCH --gres=gpu:2,gpumem:11G
+#SBATCH --gres=gpu:2,gpumem:10G
 #SBATCH --mem=64G
 #SBATCH --time=23:59:59
 #SBATCH -o $OUT_PATH/experiments/exp$experiment/exp$experiment.log
@@ -69,10 +69,11 @@ sbatch <<EOT
 
 if python3 $USER_PATH/src/trainer.py \
 --params $OUT_PATH/experiments/exp$experiment/params.yaml \
---experiment "[C] Run $experiment: ReLU 1K 512-256" \
+--experiment "[C] Run $experiment: ReLU 10K 512-64 WAS" \
 --verbose True \
 --num $experiment \
---evolution True
+--evolution True \
+--only $experiment
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi
 EOT

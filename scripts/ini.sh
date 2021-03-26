@@ -5,7 +5,6 @@ if [ "$CLUSTER" == "SHERLOCK" ]; then
     export USER_PATH="$HOME/VAEgen"
     export IN_PATH="$GROUP_SCRATCH/rita"
     export OUT_PATH="$GROUP_SCRATCH/rita"
-    source $USER_PATH/env/bin/activate
 
 elif [ "$CLUSTER" == "CALCULA" ]; then
 
