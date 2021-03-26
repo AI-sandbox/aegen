@@ -28,6 +28,7 @@ cd $USER_PATH/src
 if [ "$cluster" == "SHERLOCK" ]; then
 sbatch <<EOT
 #!/bin/sh
+#SBATCH --job-name=sVAEgen$1
 #SBATCH -p gpu
 #SBATCH -c 10
 #SBATCH -G 1
