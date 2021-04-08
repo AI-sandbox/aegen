@@ -29,14 +29,15 @@ class FullyConnected(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, params):
+    def __init__(self, params, conditional=None):
         super().__init__()
-
         modules = []
         depth = len(params.keys()) - 2
         for i in range(depth):
             modules.append(FullyConnected(
-                input=params['input']['size'] if i == 0 else params[f'hidden{i}']['size'],
+                input=(
+                    params['input']['size'] if conditional is None else (params['input']['size'] + conditional['num_classes'])
+                ) if i == 0 else params[f'hidden{i}']['size'],
                 output=params[f'hidden{i + 1}']['size'],
                 dropout=params['input']['dropout'] if i == 0 else params[f'hidden{i}']['dropout'],
                 normalize=params['input']['normalize'] if i == 0 else params[f'hidden{i}']['normalize'],
@@ -58,21 +59,23 @@ class Encoder(nn.Module):
             activation=params['input']['activation'] if depth == 0 else params[f'hidden{depth}']['activation'],
         )
 
-    def forward(self, x):
-        o = self.FCs(x)
+    def forward(self, x, c=None):
+        o = self.FCs(x if c is None else torch.cat([x, c], 1))
         o_mu = self.FCmu(o)
         o_var = self.FClogvar(o)
         return o_mu, o_var
 
 class Decoder(nn.Module):
-    def __init__(self, params):
+    def __init__(self, params, conditional=None):
         super().__init__()
         
         modules = []
         depth = len(params.keys())
         for i in range(1, depth):
+            input_size = params[f'hidden{depth - i}']['size'] 
+            if conditional is not None and i == 1: input_size += conditional['num_classes']
             modules.append(FullyConnected(
-                input=params[f'hidden{depth - i}']['size'],
+                input=input_size,
                 output=params['output']['size'] if i == depth - 1 else params[f'hidden{depth - i - 1}']['size'],
                 dropout=params[f'hidden{depth - i}']['dropout'],
                 normalize=params[f'hidden{depth - i}']['normalize'],
@@ -80,24 +83,25 @@ class Decoder(nn.Module):
             ))
         self.FCs = nn.Sequential(*modules)
 
-    def forward(self, z):
-        o = self.FCs(z)
+    def forward(self, z, c=None):
+        o = self.FCs(z if c is None else torch.cat([z, c], 1))
         return o
 
 class VAEgen(nn.Module):
     def __init__(self, params):
         super().__init__()
         
-        self.encoder = Encoder(params=params['encoder'])
-        self.decoder = Decoder(params=params['decoder'])
+        self.encoder = Encoder(params=params['encoder'], conditional=params['conditional']) 
+        self.decoder = Decoder(params=params['decoder'], conditional=params['conditional'])
+        
     
     def reparametrize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + std * eps
 
-    def forward(self, x):
-        z_mu, z_logvar = self.encoder(x)
+    def forward(self, x, c=None):
+        z_mu, z_logvar = self.encoder(x, c)
         z = self.reparametrize(z_mu, z_logvar)
-        o = self.decoder(z)
+        o = self.decoder(z, c)
         return o, z_mu, z_logvar

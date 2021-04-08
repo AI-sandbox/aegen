@@ -59,8 +59,9 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
         for i, batch in enumerate(tr_loader):
 
             snps_array = batch[0].to(device)
+            labels = batch[1].to(device) if model['architecture'] == 'C-VAE' else None
 
-            snps_reconstruction, latent_mu, latent_logvar = model['body'](snps_array)
+            snps_reconstruction, latent_mu, latent_logvar = model['body'](snps_array, labels)
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
 
@@ -144,6 +145,7 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
                 }
             )
             best_epoch = epoch + 1
+            best_loss = vd_vae_loss[-1]
             saver(
                 obj='stats',
                 num=num, 
@@ -215,8 +217,9 @@ def validate(model, vd_loader, epoch, verbose):
         for i, batch in enumerate(vd_loader):
 
             snps_array = batch[0].to(device)
+            labels = batch[1].to(device) if model['architecture'] == 'C-VAE' else None
 
-            snps_reconstruction, latent_mu, latent_logvar = model['body'](snps_array)
+            snps_reconstruction, latent_mu, latent_logvar = model['body'](snps_array, labels)
 
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
@@ -295,7 +298,8 @@ if __name__ == '__main__':
         batch_size=hyperparams['batch_size'], 
         split_set='train',
         ksize=ksize,
-        only=args.only
+        only=args.only,
+        one_hot=model_params['conditional']['num_classes'] if model_params['conditional'] is not None else None
     )
 
     vd_loader = loader(
@@ -303,7 +307,8 @@ if __name__ == '__main__':
         batch_size=hyperparams['batch_size'], 
         split_set='valid',
         ksize=ksize,
-        only=args.only
+        only=args.only,
+        one_hot=model_params['conditional']['num_classes'] if model_params['conditional'] is not None else None
     )
     
     ts_loader = loader(
@@ -343,7 +348,7 @@ if __name__ == '__main__':
     #======================== Start training ========================#
     train(
         model={
-            'architecture': 'VAE',
+            'architecture': 'VAE' if not model_params['conditional'] else 'C-VAE',
             'body': model, 
             'parallel': model_parallel,
             'num_params': num_params
