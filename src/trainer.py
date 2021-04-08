@@ -9,6 +9,7 @@ import logging
 import numpy as np
 import torch.nn as nn
 import matplotlib.pyplot as plt
+
 from parser import create_parser
 from models.VAEgen import VAEgen
 from models.losses import VAEloss, L1loss
@@ -122,7 +123,8 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
 
         if (ts_loader is not None) and (epoch % 100 == 0): #and (epoch != 0):
             log.info('Testing...')
-            test(model, ts_loader, epoch, only)
+            conditional = (model['architecture'] == 'C-VAE')
+            test(model, ts_loader, epoch, only, conditional)
         
         if bool(vd_vae_loss[-1] < best_loss):
             saver(
@@ -261,20 +263,22 @@ def validate(model, vd_loader, epoch, verbose):
         return total_vae_loss, total_rec_loss, total_KL_div, total_L1_loss, total_zeros_loss, total_ones_loss
 
 @timer
-def test(model, ts_loader, epoch, only=None):
+def test(model, ts_loader, epoch, only=None, conditional=False):
 
     # Set to evaluation mode
     model['body'].eval()
 
     original = np.empty((0, model['body'].module.encoder.FCs[0].FC[0].in_features if model['parallel'] else model['body'].encoder.FCs[0].FC[0].in_features), int)
-    latent = np.empty((0, model['body'].module.decoder.FCs[0].FC[0].in_features if model['parallel'] else model['body'].decoder.FCs[0].FC[0].in_features), int)
+    # latent = np.empty((0, model['body'].module.encoder.FCmu.FC[0].out_features if model['parallel'] else model['body'].encoder.FCmu.FC[0].out_features), int)
     labels = torch.Tensor([])
 
+
     for i, batch in enumerate(ts_loader):
-        original = np.vstack((original, batch[0]))
-        mu, _ = model['body'].module.encoder(batch[0].to(device)) if model['parallel'] else model['body'].encoder(batch[0].to(device))
-        latent = np.vstack((latent, mu.detach().cpu().squeeze(0))).astype(float)
-        labels = torch.cat((labels, batch[1].float()))
+        original = np.vstack((original, batch[0] if not conditional else (torch.cat([batch[0], batch[1].float()], 1))))
+        labels = torch.cat((labels, batch[1].float() if not conditional else (np.argmax(batch[1].float(), axis=1))))
+    original = torch.from_numpy(original).float()
+    mu, _ = model['body'].module.encoder(original.to(device)) if model['parallel'] else model['body'].encoder(original.to(device))
+    latent = mu.detach().cpu().squeeze(0).numpy().astype(float)
 
     fig = latentPCA(original, latent, labels.int(), only=only)
     wandb.log({f"Latent space at epoch {epoch}": fig})
@@ -299,7 +303,7 @@ if __name__ == '__main__':
         split_set='train',
         ksize=ksize,
         only=args.only,
-        one_hot=model_params['conditional']['num_classes'] if model_params['conditional'] is not None else None
+        conditional=args.conditional
     )
 
     vd_loader = loader(
@@ -308,7 +312,7 @@ if __name__ == '__main__':
         split_set='valid',
         ksize=ksize,
         only=args.only,
-        one_hot=model_params['conditional']['num_classes'] if model_params['conditional'] is not None else None
+        conditional=args.conditional
     )
     
     ts_loader = loader(
@@ -316,7 +320,8 @@ if __name__ == '__main__':
         batch_size=hyperparams['batch_size'], 
         split_set='test',
         ksize=ksize,
-        only=args.only
+        only=args.only,
+        conditional=args.conditional
     ) if bool(args.evolution) else None
     log.info('Data loaded ++')
     log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
@@ -324,7 +329,7 @@ if __name__ == '__main__':
     if bool(args.evolution): log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
     
     #======================== Prepare model ========================#
-    model = VAEgen(params=model_params)
+    model = VAEgen(params=model_params, conditional=args.conditional)
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     log.info(f'Using device: {device}')
@@ -348,7 +353,7 @@ if __name__ == '__main__':
     #======================== Start training ========================#
     train(
         model={
-            'architecture': 'VAE' if not model_params['conditional'] else 'C-VAE',
+            'architecture': 'VAE' if not args.conditional else 'C-VAE',
             'body': model, 
             'parallel': model_parallel,
             'num_params': num_params
