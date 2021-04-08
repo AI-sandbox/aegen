@@ -1,6 +1,5 @@
 model: 
-  conditional: 
-    num_classes: 7
+  num_classes: 7
   encoder:
     input:
       size: 10000

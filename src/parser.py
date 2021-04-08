@@ -49,4 +49,10 @@ def create_parser():
         metavar='INT',
         help='Use data only from population by label [INT]'
     )
+    parser.add_argument('--conditional', 
+        type=parse_bool, 
+        default=False, 
+        metavar='BOOL',
+        help='Conditional VAE by bool [BOOL]'
+    )
     return parser

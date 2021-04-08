@@ -29,14 +29,14 @@ class FullyConnected(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, params, conditional=None):
+    def __init__(self, params, num_classes=None):
         super().__init__()
         modules = []
         depth = len(params.keys()) - 2
         for i in range(depth):
             modules.append(FullyConnected(
                 input=(
-                    params['input']['size'] if conditional is None else (params['input']['size'] + conditional['num_classes'])
+                    params['input']['size'] if num_classes is None else (params['input']['size'] + num_classes)
                 ) if i == 0 else params[f'hidden{i}']['size'],
                 output=params[f'hidden{i + 1}']['size'],
                 dropout=params['input']['dropout'] if i == 0 else params[f'hidden{i}']['dropout'],
@@ -66,14 +66,14 @@ class Encoder(nn.Module):
         return o_mu, o_var
 
 class Decoder(nn.Module):
-    def __init__(self, params, conditional=None):
+    def __init__(self, params, num_classes=None):
         super().__init__()
         
         modules = []
         depth = len(params.keys())
         for i in range(1, depth):
             input_size = params[f'hidden{depth - i}']['size'] 
-            if conditional is not None and i == 1: input_size += conditional['num_classes']
+            if num_classes is not None and i == 1: input_size += num_classes
             modules.append(FullyConnected(
                 input=input_size,
                 output=params['output']['size'] if i == depth - 1 else params[f'hidden{depth - i - 1}']['size'],
@@ -88,12 +88,17 @@ class Decoder(nn.Module):
         return o
 
 class VAEgen(nn.Module):
-    def __init__(self, params):
+    def __init__(self, params, conditional=False):
         super().__init__()
         
-        self.encoder = Encoder(params=params['encoder'], conditional=params['conditional']) 
-        self.decoder = Decoder(params=params['decoder'], conditional=params['conditional'])
-        
+        self.encoder = Encoder(
+            params=params['encoder'], 
+            num_classes=params['num_classes'] if conditional else None
+        ) 
+        self.decoder = Decoder(
+            params=params['decoder'], 
+            num_classes=params['num_classes'] if conditional else None
+        ) 
     
     def reparametrize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
