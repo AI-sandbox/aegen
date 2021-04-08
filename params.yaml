@@ -1,7 +1,9 @@
 model: 
+  conditional: 
+    num_classes: 7
   encoder:
     input:
-      size: 50000
+      size: 10000
       dropout: 0
       normalize: true
       activation: ReLU
@@ -11,13 +13,13 @@ model:
       normalize: true
       activation: null
     hidden2: 
-      size: 256
+      size: 64
       dropout: null
       normalize: null
       activation: null
   decoder: 
     hidden2:
-      size: 256
+      size: 64
       dropout: 0
       normalize: true
       activation: ReLU
@@ -27,7 +29,7 @@ model:
       normalize: true
       activation: Sigmoid
     output:
-      size: 50000
+      size: 10000
       dropout: null
       normalize: null
       activation: null
