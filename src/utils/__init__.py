@@ -1,4 +1,4 @@
 from .decorators import timer
 from .loader import SNPs, loader
 from .loggers import progress
-from .assemblers import npy2hdf5
+from .assemblers import npy2hdf5, one_hot_encoder

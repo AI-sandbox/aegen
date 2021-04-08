@@ -2,9 +2,11 @@ import os
 import gc
 import glob
 import h5py
+import torch
 import logging
 import numpy as np
 from utils.decorators import timer
+from torch.autograd import Variable
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -21,6 +23,20 @@ def encode(catvar):
     ordinal = dict(zip(cat, np.arange(0, len(cat))))
     mapper = np.vectorize(lambda x: ordinal[x])
     return mapper(catvar), ordinal
+
+def one_hot_encoder(labels, num_classes):
+    """
+    Encodes in one-hot encoding a list of labels
+    given the total number of classes.
+
+    Inputs:
+        labels: a 1-D array with labels.
+        num_classes: the total number of classes.
+    """
+    targets = torch.zeros(labels.shape[0], num_classes)
+    for i, label in enumerate(labels):
+        targets[i, label] = 1
+    return Variable(targets)
 
 @timer
 def npy2hdf5(ipath, opath, max_limit=25000, max_variance=True):
