@@ -1,5 +1,5 @@
 # !/bin/bash
-# Sample command: ./instant.sh -e 1 -s "10K 512-64 ReLU" --verbose
+# Sample command: ./instant.sh -e 1 -s "[C] Imputation: 10K 512-64 ReLU" --verbose
 while [[ $# -gt 0 ]]; do 
     case $1 in
         -v | --verbose ) shift; verbose="True" ;;
@@ -16,12 +16,13 @@ if [[ -z $summary ]]; then echo "Missing experiment summary."; exit 1; fi
 echo "Executing instant experiment ($summary)(#$exp)"
 mkdir -p $OUT_PATH/experiments/exp$exp
 cp $USER_PATH/params.yaml $OUT_PATH/experiments/exp$exp/
-if srun -u --gres=gpu:2,gpumem:11G -p gpi.develop -c 8 --time 01:59:59 --mem 32GB python3 $USER_PATH/src/trainer.py \
+if srun -u --gres=gpu:2,gpumem:11G -p gpi.compute -c 8 --time 01:59:59 --mem 32GB python3 $USER_PATH/src/trainer.py \
     --params $OUT_PATH/experiments/exp$exp/params.yaml \
     --experiment "$summary" \
     --verbose $verbose \
     --num $exp \
-    --evolution True \
-    --conditional True; then
+    --evolution False \
+    --conditional False \
+    --imputation True; then
     echo "Success!"
 else echo 'Fail!'; fi

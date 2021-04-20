@@ -303,7 +303,7 @@ if __name__ == '__main__':
         split_set='train',
         ksize=ksize,
         only=args.only,
-        conditional=args.conditional
+        conditional=args.conditional,
     )
 
     vd_loader = loader(
@@ -329,7 +329,11 @@ if __name__ == '__main__':
     if bool(args.evolution): log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
     
     #======================== Prepare model ========================#
-    model = VAEgen(params=model_params, conditional=args.conditional)
+    model = VAEgen(
+        params=model_params, 
+        conditional=args.conditional,
+        imputation=args.imputation
+    )
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     log.info(f'Using device: {device}')
@@ -356,7 +360,8 @@ if __name__ == '__main__':
             'architecture': 'VAE' if not args.conditional else 'C-VAE',
             'body': model, 
             'parallel': model_parallel,
-            'num_params': num_params
+            'num_params': num_params,
+            'imputation': args.imputation,
         }, 
         optimizer={
             'body': optimizer,

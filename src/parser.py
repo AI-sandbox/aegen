@@ -55,4 +55,11 @@ def create_parser():
         metavar='BOOL',
         help='Conditional VAE by bool [BOOL]'
     )
+    parser.add_argument('--imputation', 
+        type=parse_bool, 
+        default=False, 
+        metavar='BOOL',
+        help='Imputation VAE by bool [BOOL]'
+    )
+
     return parser

@@ -1,4 +1,5 @@
 import torch
+import random
 import numpy as np
 import torch.nn as nn
 
@@ -88,9 +89,10 @@ class Decoder(nn.Module):
         return o
 
 class VAEgen(nn.Module):
-    def __init__(self, params, conditional=False):
+    def __init__(self, params, conditional=False, imputation=False):
         super().__init__()
         
+        self.imputation, self.missing = imputation, params['missing']
         self.encoder = Encoder(
             params=params['encoder'], 
             num_classes=params['num_classes'] if conditional else None
@@ -106,6 +108,12 @@ class VAEgen(nn.Module):
         return mu + std * eps
 
     def forward(self, x, c=None):
+        if self.imputation: 
+            x = 2 * x - 1
+            if self.missing > 0:
+                for i in range(x.shape[0]):
+                    idxs = torch.tensor(random.sample(range(x.shape[1]), int(x.shape[1] * self.missing))).type(torch.long)
+                    x[i,idxs] = 0
         z_mu, z_logvar = self.encoder(x, c)
         z = self.reparametrize(z_mu, z_logvar)
         o = self.decoder(z, c)

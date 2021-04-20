@@ -1,5 +1,6 @@
 model: 
   num_classes: 7
+  missing: 0.75
   encoder:
     input:
       size: 10000
