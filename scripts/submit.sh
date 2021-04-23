@@ -42,10 +42,12 @@ ml load py-scikit-learn/0.19.1_py36
 
 if python3 $USER_PATH/src/trainer.py \
 --params $OUT_PATH/experiments/exp$experiment/params.yaml \
---experiment "[S] Run $experiment: ReLU 50K 512-256" \
+--experiment "[S] Run $experiment: Imputation (%) 50K 512-256" \
 --verbose True \
 --num $experiment \
---evolution True
+--evolution False \
+--conditional False \
+--imputation True;
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi
 EOT
@@ -69,11 +71,12 @@ sbatch <<EOT
 
 if python3 $USER_PATH/src/trainer.py \
 --params $OUT_PATH/experiments/exp$experiment/params.yaml \
---experiment "[C] Run $experiment: ReLU 10K 512-64 WAS" \
+--experiment "[C] Run $experiment: FAST Imputation ($experiment%) 10K 512-64" \
 --verbose True \
 --num $experiment \
---evolution True \
---only $experiment
+--evolution False \
+--conditional False \
+--imputation True;
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi
 EOT
