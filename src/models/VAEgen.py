@@ -1,5 +1,4 @@
 import torch
-import random
 import numpy as np
 import torch.nn as nn
 
@@ -109,12 +108,12 @@ class VAEgen(nn.Module):
 
     def forward(self, x, c=None):
         if self.imputation: 
-            x = 2 * x - 1
+            x, sz = 2 * x - 1, x.shape
             if self.missing > 0:
-                for i in range(x.shape[0]):
-                    idxs = torch.tensor(random.sample(range(x.shape[1]), int(x.shape[1] * self.missing))).type(torch.long)
-                    x[i,idxs] = 0
+                mask = torch.from_numpy((np.random.uniform(size=np.prod(sz)) < self.missing)).type(torch.bool).reshape(sz).cuda()
+                x[mask] = 0
         z_mu, z_logvar = self.encoder(x, c)
         z = self.reparametrize(z_mu, z_logvar)
         o = self.decoder(z, c)
-        return o, z_mu, z_logvar
+        if self.imputation and self.missing > 0: return o, z_mu, z_logvar, mask
+        else: return o, z_mu, z_logvar
