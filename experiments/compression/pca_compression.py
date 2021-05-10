@@ -9,8 +9,6 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import matplotlib
 
-from utils import RLE, load_data
-
 # Set environment variables
 os.chdir(os.path.join(os.environ.get('HOME'),'VAEgen/scripts'))
 os.environ["USER_PATH"]="/home/users/geleta/VAEgen"
@@ -37,8 +35,6 @@ def load_data(n_snps, split_type, of_pop=None, n_samples_2_ret=-1):
     h5f.close()
     print(f"Data loaded")
     return snps, popis
-# Load training data
-tr_snps, tr_popis = load_data(n_snps = 10000, split_type='train')
 
 # Constructor PCA for genomic data
 class genPCA:
@@ -75,7 +71,8 @@ def RLE(array):
 
 # Test the compression performance of PCA with all data
 def exp1():
-    rles_pca = np.empty([0,7])
+    # Load training data
+    tr_snps, tr_popis = load_data(n_snps = 10000, split_type='train')
     # Number of test samples
     totals = 600
     # Number of components to test (powers of 2)
@@ -85,6 +82,7 @@ def exp1():
     gpca.fit(tr_snps)
     # Dimension to start from
     curr_dim = 2
+    rles_pca = np.empty([0,7])
     while curr_dim <= components_2_test_up_2:
         print(f'TESTING PCA WITH {curr_dim} COMPONENTS')
         rles = []
@@ -122,10 +120,60 @@ def exp1():
 
 # Test the compression performance of PCA fitted to specific populations
 def exp2():
-    return ...
+    # Load training data
+    tr_snps, tr_popis = load_data(n_snps = 10000, split_type='train')
+    # Number of test samples
+    totals = 600
+    # Number of components to test (powers of 2)
+    components_2_test_up_2 = 512
+    # Fit PCs to data of each population
+    gpcas = []
+    for i, pop in enumerate(populations):
+        pop_idx = np.where(np.asarray(tr_popis) == i)[0]
+        snps = tr_snps[pop_idx,:]
+        print(f'Fitting genPCA for population {pop}...')
+        gpca = genPCA(n_components=components_2_test_up_2)
+        gpca.fit(snps)
+        gpcas.append(gpca)
+    # Dimension to start from
+    curr_dim = 2
+    rles_pca = np.empty([0,7])
+    while curr_dim <= components_2_test_up_2:
+        rles = []
+        for i, pop in enumerate(populations):
+            print(f'TESTING ({pop})-PCA WITH {curr_dim} COMPONENTS')
+            # Load test data
+            snps, popis = load_data(n_snps = 10000, split_type='test', of_pop=i, n_samples_2_ret=totals)
+            torch_snps = torch.from_numpy(snps)
+            reconstructed_snps = np.empty((0,torch_snps.shape[1]), int)
+            # Project snps to latent space
+            latent_snps = gpcas[i].project(torch_snps)[:,:curr_dim]
+            print(f'Latent SNPs size: {latent_snps.shape}')
+            # Expand back to original size
+            reconstructed_snps = gpcas[i].expand(latent_snps)
+            print(f'\tReconstructed {reconstructed_snps.shape} SNPs')
+            # Compute RLE lengths
+            rle_lengths_rec = []
+            for individual in range(totals):
+                if (individual % totals == 0) and (individual != 0): break
+                diff = np.abs((reconstructed_snps[individual,:] - snps[individual,:]))
+                length = len(RLE(diff.astype(bool)))
+                rle_lengths_rec.append(length)
+            rles.append(rle_lengths_rec)
+            print(f'MEAN RLE LENGTH {np.mean(rles[i])}')
+            # Compute size after compression 
+            compressed = np.mean(rles[i]) * 16 + curr_dim * 32
+            original = 10 * (10 ** 3)
+            compression_ratio = compressed / original
+            print(f'COMPRESSION RATIO: {compression_ratio}\n')
+        
+        rles_pca = np.vstack([rles_pca,np.asarray([np.mean(np.asarray(pop)) for pop in rles])])
+        curr_dim = curr_dim * 2
+    # Store lengths 
+    np.save('pca_compression_exp_2.npy', rles_pca)
 
 if __name__ == '__main__':
-    exp1()
+    exp2()
 
 
 
