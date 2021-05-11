@@ -30,8 +30,9 @@ def load_data(n_snps, split_type, of_pop=None, n_samples_2_ret=-1):
     if of_pop is not None:
         pop_idx = np.where(np.asarray(popis) == of_pop)[0]
         snps = snps[pop_idx,:]
-        # Return specific number of samples if needed
-        snps = snps[:n_samples_2_ret,:]
+    # Return specific number of samples if needed
+    snps = snps[:n_samples_2_ret,:]
+    popis = popis[:n_samples_2_ret]
     h5f.close()
     print(f"Data loaded")
     return snps, popis
