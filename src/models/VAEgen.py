@@ -19,7 +19,7 @@ class FullyConnected(nn.Module):
                 modules.append(nn.Sigmoid())
             elif activation == 'Softplus':
                 modules.append(nn.Softplus())
-            elif activation == 'GELU': # GAUSSIAN ERROR LINEAR UNITS
+            elif activation == 'GELU':
                 modules.append(nn.GELU())
         self.FC = nn.Sequential(*modules)
 

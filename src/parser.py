@@ -13,6 +13,18 @@ def parse_bool(boolean):
 
 def create_parser():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--species', 
+        type=str, 
+        default='human', 
+        metavar='STR',
+        help='SNP data species: [human], [canid]'
+    )
+    parser.add_argument('--chr', 
+        type=int, 
+        default=22, 
+        metavar='INT',
+        help='Chromosome [chr] number'
+    )
     parser.add_argument('--params', 
         type=str, 
         default=os.path.join(os.environ.get('USER_PATH'), 'params.yaml'), 

@@ -1,6 +1,6 @@
 model: 
   num_classes: 7
-  missing: 0.75
+  missing: 0
   encoder:
     input:
       size: 10000
@@ -40,3 +40,9 @@ hyperparams:
   lr: 0.00001
   beta: 1
   weight_decay: 0
+  scheduler: 
+    method: plateau
+    factor: 0.1
+    patience: 5
+    threshold: 0.0001
+    mode: rel

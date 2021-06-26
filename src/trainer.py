@@ -59,6 +59,8 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
         epoch_L1_loss, epoch_zeros_loss, epoch_ones_loss = [], [], []
         epoch_compression_ratio = []
         if model['imputation']: epoch_imputation_L1_loss = []
+
+        if optimizer['scheduler'] is not None: optimizer['scheduler'].step()
         
         for i, batch in enumerate(tr_loader):
 
@@ -330,33 +332,21 @@ if __name__ == '__main__':
     ksize=int(model_params['encoder']['input']['size'] / 1000)
     
     #======================== Prepare data ========================#
+    IPATH = os.path.join(os.environ.get('IN_PATH'), f'{params["species"]}/data/chr{params["chr"]}/prepared')
     log.info('Loading data...')
-    tr_loader = loader(
-        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/chr22/prepared'),
-        batch_size=hyperparams['batch_size'], 
-        split_set='train',
-        ksize=ksize,
-        only=args.only,
-        conditional=args.conditional,
-    )
-
-    vd_loader = loader(
-        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/chr22/prepared'),
-        batch_size=hyperparams['batch_size'], 
-        split_set='valid',
-        ksize=ksize,
-        only=args.only,
-        conditional=args.conditional
-    )
-    
-    ts_loader = loader(
-        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/chr22/prepared'),
-        batch_size=hyperparams['batch_size'], 
-        split_set='test',
-        ksize=ksize,
-        only=args.only,
-        conditional=args.conditional
-    ) if bool(args.evolution) else None
+    for _loader, _set in zip(('tr_loader', 'vd_loader', 'ts_loader'), ('train', 'valid', 'test')):
+        exec(f'''
+            if {_set} == 'test': {_loader} = None
+            if ({_set} == 'test' and {bool(args.evolution)}) or ({_set} != 'test'):
+                {_loader} = loader(
+                    ipath={IPATH},
+                    batch_size={hyperparams['batch_size']}, 
+                    split_set={_set},
+                    ksize={ksize},
+                    only={args.only},
+                    conditional={args.conditional},
+                )
+        ''')
     log.info('Data loaded ++')
     log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
     log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
@@ -388,6 +378,37 @@ if __name__ == '__main__':
         weight_decay=hyperparams['weight_decay']
     )
 
+    #======================== Prepare scheduler ========================#
+    if hyperparams['scheduler'] is not None:
+        if hyperparams['scheduler']['method'] == 'plateau':
+            lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                mode='min',
+                factor=hyperparams['scheduler']['factor'],
+                patience=hyperparams['scheduler']['patience'],
+                threshold=hyperparams['scheduler']['threshold'],
+                threshold_mode=hyperparams['scheduler']['mode']
+            )
+        elif hyperparams['scheduler']['method'] == 'step':
+            lr_scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer,
+                step_size=hyperparams['scheduler']['step'],
+                gamma=hyperparams['scheduler']['gamma']
+            )
+        elif hyperparams['scheduler']['method'] == 'multistep':
+            lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+                optimizer,
+                milestones=hyperparams['scheduler']['milestones'],
+                gamma=hyperparams['scheduler']['gamma']
+            )
+        elif hyperparams['scheduler']['method'] == 'exponential':
+            lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                optimizer,
+                gamma=hyperparams['scheduler']['gamma']
+            )
+        else: raise Exception('Wrong definition for scheduler')
+    else: lr_scheduler = None
+
     #======================== Start training ========================#
     train(
         model={
@@ -399,6 +420,7 @@ if __name__ == '__main__':
         }, 
         optimizer={
             'body': optimizer,
+            'scheduler': lr_scheduler
         },
         data=(tr_loader, vd_loader, ts_loader),
         hyperparams=hyperparams,
