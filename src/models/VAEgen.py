@@ -12,7 +12,7 @@ class FullyConnected(nn.Module):
         modules.append(nn.Linear(input, output))
         ## Normalize layer if desired.
         if normalize:
-            modules.append(nn.BatchNorm1d(output))
+            modules.append(nn.BatchNorm1d(1))
         ## Add activation function if desired.
         if activation is not None:
             if activation == 'ReLU':
@@ -72,7 +72,7 @@ class Encoder(nn.Module):
 
     def forward(self, x, c=None):
         o = self.FCs(x if c is None else torch.cat([x, c], 1))
-        if self.distribution == 'Gaussian':
+        if self.latent_distribution == 'Gaussian':
             o_mu = self.FCmu(o)
             o_var = self.FClogvar(o)
             return o_mu, o_var
@@ -82,11 +82,18 @@ class Encoder(nn.Module):
 class Quantizer(nn.Module):
     def __init__(self, latent_distribution):
         super().__init__()
-        
+        self.latent_distribution = latent_distribution
         
     def forward(self, ze):
-        # Somehow quantize
-        return ze
+        if self.latent_distribution == 'Multi-Bernoulli':
+            zq = torch.ones(ze.shape)
+            zq[ze < 0] = -1
+        return zq
+    
+    def backward(self, grad_zq):
+        grad_ze = grad_zq.clone()
+        return grad_ze, None
+        
 
 class Decoder(nn.Module):
     def __init__(self, params, num_classes=None):
@@ -131,14 +138,14 @@ class AEgen(nn.Module):
         self.encoder = Encoder(
             latent_distribution = self.latent_distribution,
             params=params['encoder'], 
-            #num_classes=params['num_classes'] if conditional else None
+            num_classes=params['num_classes'] if conditional else None
         )
         ## Decoder is defined by:
         ## - Parameters: layers' definitions.
         ## - Num_classes: if conditional Decoder.
         self.decoder = Decoder(
             params=params['decoder'], 
-            #num_classes=params['num_classes'] if conditional else None
+            num_classes=params['num_classes'] if conditional else None
         ) 
         ## Optionally: a quantizer.
         ## Makes the latent space discrete.
@@ -162,15 +169,23 @@ class AEgen(nn.Module):
         ## - Logvar feature.
         ## These 2 feature maps are reparametrized
         ## to yield z - the latent factors' vector.
-        if self.distribution == 'Gaussian':
+        if self.latent_distribution == 'Gaussian':
+            print(x)
             z_mu, z_logvar = self.encoder(x, c)
+            print(z_mu)
             z = self.reparametrize(z_mu, z_logvar)
+            print(z)
             o = self.decoder(z, c)
+            print(o)
         ## LBAE or VQ-VAE
-        elif self.distribution == 'Multi-Bernoulli' or self.distribution == 'VQ-VAE':
+        elif self.latent_distribution == 'Multi-Bernoulli' or self.latent_distribution == 'VQ-VAE':
+            print(x.shape, x)
             ze = self.encoder(x, c)
+            print(ze.shape, ze)
             zq = self.quantizer(ze)
-            o = self.decoder(z, c)
+            print(zq.shape, zq)
+            o = self.decoder(zq, c)
+            print(o.shape, o)
         ## Unknown distribution
         else: raise Exception('Unknown distribution.')
         return o
