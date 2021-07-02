@@ -80,17 +80,41 @@ class Encoder(nn.Module):
             return o
         
 class Quantizer(nn.Module):
-    def __init__(self, latent_distribution):
+    def __init__(self, latent_distribution, codebook = None):
         super().__init__()
         self.latent_distribution = latent_distribution
+        self.codebook = codebook
         
     def forward(self, ze):
+        ## In Multi-Bernoulli LS, the quantizer
+        ## uses a threshold to binarize the 
+        ## latent vectors.
         if self.latent_distribution == 'Multi-Bernoulli':
             zq = torch.ones(ze.shape)
             zq[ze < 0] = -1
+        ## In Uniform LS, the quantizer
+        ## computes the distances to the
+        ## codebook vectors and takes the argmin.
+        elif self.latent_distribution == 'Uniform':
+            if ze.size(-1) != self.codebook.size(-1):
+                raise RuntimeError(
+                    f'[Error] Invalid argument: ze.size(-1) ({ze.size(-1)}) must be equal to self.codebook.size(-1) ({self.codebook.size(-1)})'
+                )
+            print(f'Codebook shape: {self.codebook.shape}')
+            print(ze)
+            sq_norm = (torch.sum(ze**2, dim = -1, keepdim = True) 
+                    + torch.sum(self.codebook**2, dim = 1)
+                    - 2 * torch.matmul(ze, self.codebook.t()))
+            print(f'Sq Norm: {sq_norm}')
+            _, argmin = sq_norm.min(-1)
+            print(f'Codebook argmin: {argmin}')
+            print(f'Codebook indices: {argmin.view(-1)}')
+            zq = self.codebook.index_select(0, argmin.view(-1)).view(ze.shape)
+
         return zq
     
     def backward(self, grad_zq):
+        ## Clone decoder gradients to encoder.
         grad_ze = grad_zq.clone()
         return grad_ze, None
         
@@ -148,9 +172,18 @@ class AEgen(nn.Module):
             num_classes=params['num_classes'] if conditional else None
         ) 
         ## Optionally: a quantizer.
+        ## - Latent distribution.
         ## Makes the latent space discrete.
+        self.codebook = nn.Parameter(
+            torch.bernoulli(
+                torch.empty(
+                    params['codebook_size'], params['decoder']['layer0']['size']
+                ).uniform_(0, 1)
+            )
+        ) if self.latent_distribution == 'Uniform' else None
         self.quantizer = Quantizer(
             latent_distribution = self.latent_distribution,
+            codebook = self.codebook
         )
     
     ## Variational Auto-encoder: Gaussian latent space
@@ -177,8 +210,16 @@ class AEgen(nn.Module):
             print(z)
             o = self.decoder(z, c)
             print(o)
-        ## LBAE or VQ-VAE
-        elif self.latent_distribution == 'Multi-Bernoulli' or self.latent_distribution == 'VQ-VAE':
+        ## LBAE or VQ-VAE (Discrete Latent Spaces)
+        elif self.latent_distribution == 'Multi-Bernoulli':
+            print(x.shape, x)
+            ze = self.encoder(x, c)
+            print(ze.shape, ze)
+            zq = self.quantizer(ze)
+            print(zq.shape, zq)
+            o = self.decoder(zq, c)
+            print(o.shape, o)
+        elif self.latent_distribution == 'Uniform':
             print(x.shape, x)
             ze = self.encoder(x, c)
             print(ze.shape, ze)
