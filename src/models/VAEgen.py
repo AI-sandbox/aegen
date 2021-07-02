@@ -109,6 +109,7 @@ class Encoder(nn.Module):
                 self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(depth)]))
         elif self.shape == 'hybrid':
             raise Exception('Not implemented.')
+        else: raise Exception('Unknown shape.')
 
     def forward(self, x, c=None):
         if self.shape == 'global':
@@ -125,16 +126,17 @@ class Encoder(nn.Module):
             os = [] ## Stores the outputs of each window.
             for w in range(self.n_windows):
                 if w == self.n_windows - 1:
-                    x_windowed = x[:,:, w * self.window_size:]
+                    x_windowed = x[..., w * self.window_size:]
                 else:
-                    x_windowed = x[:,:, w * self.window_size:(w + 1) * self.window_size]
+                    x_windowed = x[..., w * self.window_size:(w + 1) * self.window_size]
                 ## Process each window with the corresponding funnel.
                 os.append(self.funnel[w](x_windowed))
             ## Concat all outputs into a single o vector.
             o = torch.cat(os, axis=-1)
             return o
-        else:
+        elif self.shape == 'hybrid':
             raise Exception('Not implemented.')
+        else: raise Exception('Unknown shape.')
         
 class Quantizer(nn.Module):
     def __init__(self, latent_distribution, codebook = None):
@@ -179,25 +181,73 @@ class Quantizer(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, params, num_classes=None, shape='global', window_size=None):
         super().__init__()
-        
-        modules = []
+        ## Define the shape of the Encoder.
+        self.shape = shape
+        ## Define the depth of the network.
         depth = len(params.keys()) - 1
-        for i in range(depth):
-            modules.append(FullyConnected(
-                ## Only can condition input (layer0).
-                input = (
-                    params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
-                ) if i == 0 else params[f'layer{i}']['size'],
-                output     = params[f'layer{i + 1}']['size'],
-                dropout    = params[f'layer{i}']['dropout'],
-                normalize  = params[f'layer{i}']['normalize'],
-                activation = params[f'layer{i}']['activation'],
-            ))
-        self.FCs = nn.Sequential(*modules)
+        ## If shape is not global, define window size and number of windows.
+        self.window_size = window_size
+        if window_size is not None and shape != 'global':
+            self.n_windows = int(np.floor(params[f'layer{depth}']['size'] / window_size))
+        
+        ## Shape global modules definitions.
+        if self.shape == 'global':
+            modules = []
+            for i in range(depth):
+                modules.append(FullyConnected(
+                    ## Only can condition input (layer0).
+                    input = (
+                        params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
+                    ) if i == 0 else params[f'layer{i}']['size'],
+                    output     = params[f'layer{i + 1}']['size'],
+                    dropout    = params[f'layer{i}']['dropout'],
+                    normalize  = params[f'layer{i}']['normalize'],
+                    activation = params[f'layer{i}']['activation'],
+                ))
+            self.FCs = nn.Sequential(*modules)
+        elif self.shape == 'window-based':
+            modules = {}
+            ## For each layer and for each window we define a FC matrix.
+            for i in range(depth):
+                for w in range(self.n_windows):
+                    ## If last layerD, we split the output size.
+                    ## Otherwise, we use the size defined in params.
+                    if i == depth - 1:
+                        if w != self.n_windows - 1:
+                            wsize = self.window_size
+                        else: wsize = self.window_size + (params[f'layer{depth}']['size'] % self.window_size)
+                    else: wsize = params[f'layer{i + 1}']['size']
+                    modules[f'layer{i}_win{w}'] = FullyConnected(
+                        input      = params[f'layer{i}']['size'],
+                        output     = wsize,
+                        dropout    = params[f'layer{i}']['dropout'],
+                        normalize  = params[f'layer{i}']['normalize'],
+                        activation = params[f'layer{i}']['activation'],
+                    )
+            ## We create funnels for each window.
+            self.funnel = []
+            for w in range(self.n_windows):
+                self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(depth)]))
+            self.split_size = params['layer0']['size']
+            
+        elif self.shape == 'hybrid':
+            raise Exception('Not implemented.')
+        else: raise Exception('Unknown shape.')
 
     def forward(self, z, c=None):
-        o = self.FCs(z if c is None else torch.cat([z, c], -1))
-        return o
+        if self.shape == 'global':
+            o = self.FCs(z if c is None else torch.cat([z, c], -1))
+            return o
+        elif self.shape == 'window-based':
+            os = [] ## Stores the outputs of each window.
+            for w in range(self.n_windows):
+                os.append(self.funnel[w](z[..., w * self.split_size: (w + 1) * self.split_size]))
+            ## Concat all outputs into a single o vector.
+            o = torch.cat(os, axis=-1)
+            return o
+        elif self.shape == 'hybrid':
+            raise Exception('Not implemented.')
+        else: raise Exception('Unknown shape.')
 
 class AEgen(nn.Module):
     def __init__(self, params, conditional=False, sample_mode=False):
