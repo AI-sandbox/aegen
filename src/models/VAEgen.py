@@ -23,6 +23,8 @@ class FullyConnected(nn.Module):
                 modules.append(nn.Softplus())
             elif activation == 'GELU':
                 modules.append(nn.GELU())
+            elif activation == 'Tanh':
+                modules.append(nn.Tanh())
         self.FC = nn.Sequential(*modules)
 
     def forward(self, x):
@@ -35,33 +37,37 @@ class Encoder(nn.Module):
         super().__init__()
         self.latent_distribution = latent_distribution
         modules = []
-        depth = len(params.keys()) if self.latent_distribution != 'Gaussian' else len(params.keys()) - 1
+        depth = len(params.keys()) - 1 if self.latent_distribution != 'Gaussian' else len(params.keys()) - 2
+        if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Tanh'):
+            raise Exception('[ERROR] Missing tanh activation!')
         for i in range(depth):
             modules.append(FullyConnected(
                 ## Only can condition input (layer0).
                 input = (
-                    params[f'layer{i}']['size'] if num_classes is None else (params['layer']['size'] + num_classes)
-                ) if i == 0 else params[f'hidden{i}']['size'],
-                output = params[f'layer{i + 1}']['size'],
-                dropout = params[f'layer{i}']['dropout'],
-                normalize = params[f'layer{i}']['normalize'],
+                    params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
+                ) if i == 0 else params[f'layer{i}']['size'],
+                output     = params[f'layer{i + 1}']['size'],
+                dropout    = params[f'layer{i}']['dropout'],
+                normalize  = params[f'layer{i}']['normalize'],
                 activation = params[f'layer{i}']['activation'],
             ))
         self.FCs = nn.Sequential(*modules)
         if self.latent_distribution == 'Gaussian':
+            if params[f'layer{depth}']['activation'] != None:
+                print('[WARNING] Activation for Mu and Logvar features is not the identity.')
             self.FCmu = FullyConnected(
-                input = params[f'layer{depth}']['size'],
-                output=params[f'layer{depth + 1}']['size'],
-                dropout=params[f'layer{depth}']['dropout'],
-                normalize=params[f'layer{depth}']['normalize'],
-                activation=params[f'layer{depth}']['activation'],
+                input      = params[f'layer{depth}']['size'],
+                output     = params[f'layer{depth + 1}']['size'],
+                dropout    = params[f'layer{depth}']['dropout'],
+                normalize  = params[f'layer{depth}']['normalize'],
+                activation = params[f'layer{depth}']['activation'],
             )
             self.FClogvar = FullyConnected(
-                input=params[f'layer{depth}']['size'],
-                output=params[f'layer{depth + 1}']['size'],
-                dropout=params[f'layer{depth}']['dropout'],
-                normalize=params[f'layer{depth}']['normalize'],
-                activation=params[f'layer{depth}']['activation'],
+                input      = params[f'layer{depth}']['size'],
+                output     = params[f'layer{depth + 1}']['size'],
+                dropout    = params[f'layer{depth}']['dropout'],
+                normalize  = params[f'layer{depth}']['normalize'],
+                activation = params[f'layer{depth}']['activation'],
             )
 
     def forward(self, x, c=None):
@@ -72,22 +78,32 @@ class Encoder(nn.Module):
             return o_mu, o_var
         else:
             return o
+        
+class Quantizer(nn.Module):
+    def __init__(self, latent_distribution):
+        super().__init__()
+        
+        
+    def forward(self, ze):
+        # Somehow quantize
+        return ze
 
 class Decoder(nn.Module):
     def __init__(self, params, num_classes=None):
         super().__init__()
         
         modules = []
-        depth = len(params.keys())
-        for i in range(1, depth):
-            input_size = params[f'hidden{depth - i}']['size'] 
-            if num_classes is not None and i == 1: input_size += num_classes
+        depth = len(params.keys()) - 1
+        for i in range(depth):
             modules.append(FullyConnected(
-                input=input_size,
-                output=params['output']['size'] if i == depth - 1 else params[f'hidden{depth - i - 1}']['size'],
-                dropout=params[f'hidden{depth - i}']['dropout'],
-                normalize=params[f'hidden{depth - i}']['normalize'],
-                activation=params[f'hidden{depth - i}']['activation'],
+                ## Only can condition input (layer0).
+                input = (
+                    params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
+                ) if i == 0 else params[f'layer{i}']['size'],
+                output     = params[f'layer{i + 1}']['size'],
+                dropout    = params[f'layer{i}']['dropout'],
+                normalize  = params[f'layer{i}']['normalize'],
+                activation = params[f'layer{i}']['activation'],
             ))
         self.FCs = nn.Sequential(*modules)
 
@@ -95,7 +111,7 @@ class Decoder(nn.Module):
         o = self.FCs(z if c is None else torch.cat([z, c], 1))
         return o
 
-class VAEgen(nn.Module):
+class AEgen(nn.Module):
     def __init__(self, params, conditional=False, sample_mode=False):
         super().__init__()
         ## AE shape can be:
@@ -105,7 +121,7 @@ class VAEgen(nn.Module):
         self.shape = params['shape']
         ## Latent space distrubution can be:
         ## - Gaussian: regular VAE.
-        ## - Bernoulli: LBAE.
+        ## - Multi-Bernoulli: LBAE. http://proceedings.mlr.press/v119/fajtl20a/fajtl20a.pdf
         ## - Uniform: VQ-VAE.
         self.latent_distribution = params['distribution']
         ## Encoder is defined by:
@@ -124,6 +140,11 @@ class VAEgen(nn.Module):
             params=params['decoder'], 
             #num_classes=params['num_classes'] if conditional else None
         ) 
+        ## Optionally: a quantizer.
+        ## Makes the latent space discrete.
+        self.quantizer = Quantizer(
+            latent_distribution = self.latent_distribution,
+        )
     
     ## Variational Auto-encoder: Gaussian latent space
     def reparametrize(self, mu, logvar):
@@ -145,12 +166,11 @@ class VAEgen(nn.Module):
             z_mu, z_logvar = self.encoder(x, c)
             z = self.reparametrize(z_mu, z_logvar)
             o = self.decoder(z, c)
-            return o, z_mu, z_logvar
-        ## LBAE 
-        elif self.distribution == 'Bernoulli':
-            raise('Not implemented.')
-        ## VQ-VAE
-        elif self.distribution == 'Uniform':
-            raise('Not implemented.')
+        ## LBAE or VQ-VAE
+        elif self.distribution == 'Multi-Bernoulli' or self.distribution == 'VQ-VAE':
+            ze = self.encoder(x, c)
+            zq = self.quantizer(ze)
+            o = self.decoder(z, c)
         ## Unknown distribution
-        else: raise('Unknown distribution.')
+        else: raise Exception('Unknown distribution.')
+        return o
