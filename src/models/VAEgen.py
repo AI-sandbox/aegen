@@ -11,8 +11,9 @@ class FullyConnected(nn.Module):
             modules.append(nn.AlphaDropout(p=dropout))
         modules.append(nn.Linear(input, output))
         ## Normalize layer if desired.
-        if normalize:
+        if normalize: ## TODO: BatchNorm
             modules.append(nn.BatchNorm1d(1))
+            
         ## Add activation function if desired.
         if activation is not None:
             if activation == 'ReLU':
@@ -71,7 +72,7 @@ class Encoder(nn.Module):
             )
 
     def forward(self, x, c=None):
-        o = self.FCs(x if c is None else torch.cat([x, c], 1))
+        o = self.FCs(x if c is None else torch.cat([x, c], -1))
         if self.latent_distribution == 'Gaussian':
             o_mu = self.FCmu(o)
             o_var = self.FClogvar(o)
@@ -100,15 +101,15 @@ class Quantizer(nn.Module):
                 raise RuntimeError(
                     f'[Error] Invalid argument: ze.size(-1) ({ze.size(-1)}) must be equal to self.codebook.size(-1) ({self.codebook.size(-1)})'
                 )
-            print(f'Codebook shape: {self.codebook.shape}')
-            print(ze)
+            # print(f'Codebook shape: {self.codebook.shape}')
+            # print(ze)
             sq_norm = (torch.sum(ze**2, dim = -1, keepdim = True) 
                     + torch.sum(self.codebook**2, dim = 1)
                     - 2 * torch.matmul(ze, self.codebook.t()))
-            print(f'Sq Norm: {sq_norm}')
+            # print(f'Sq Norm: {sq_norm}')
             _, argmin = sq_norm.min(-1)
-            print(f'Codebook argmin: {argmin}')
-            print(f'Codebook indices: {argmin.view(-1)}')
+            # print(f'Codebook argmin: {argmin}')
+            # print(f'Codebook indices: {argmin.view(-1)}')
             zq = self.codebook.index_select(0, argmin.view(-1)).view(ze.shape)
 
         return zq
@@ -139,7 +140,7 @@ class Decoder(nn.Module):
         self.FCs = nn.Sequential(*modules)
 
     def forward(self, z, c=None):
-        o = self.FCs(z if c is None else torch.cat([z, c], 1))
+        o = self.FCs(z if c is None else torch.cat([z, c], -1))
         return o
 
 class AEgen(nn.Module):
@@ -203,30 +204,18 @@ class AEgen(nn.Module):
         ## These 2 feature maps are reparametrized
         ## to yield z - the latent factors' vector.
         if self.latent_distribution == 'Gaussian':
-            print(x)
             z_mu, z_logvar = self.encoder(x, c)
-            print(z_mu)
             z = self.reparametrize(z_mu, z_logvar)
-            print(z)
             o = self.decoder(z, c)
-            print(o)
         ## LBAE or VQ-VAE (Discrete Latent Spaces)
         elif self.latent_distribution == 'Multi-Bernoulli':
-            print(x.shape, x)
             ze = self.encoder(x, c)
-            print(ze.shape, ze)
             zq = self.quantizer(ze)
-            print(zq.shape, zq)
             o = self.decoder(zq, c)
-            print(o.shape, o)
         elif self.latent_distribution == 'Uniform':
-            print(x.shape, x)
             ze = self.encoder(x, c)
-            print(ze.shape, ze)
             zq = self.quantizer(ze)
-            print(zq.shape, zq)
             o = self.decoder(zq, c)
-            print(o.shape, o)
         ## Unknown distribution
         else: raise Exception('Unknown distribution.')
         return o
