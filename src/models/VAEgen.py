@@ -34,51 +34,107 @@ class FullyConnected(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, latent_distribution, params, num_classes=None):
+    def __init__(self, latent_distribution, params, num_classes=None, shape='global', window_size=None):
         super().__init__()
+        ## Define latent distribution.
         self.latent_distribution = latent_distribution
-        modules = []
+        ## Define the shape of the Encoder.
+        self.shape = shape
+        ## If shape is not global, define window size and number of windows.
+        self.window_size = window_size
+        if window_size is not None and shape != 'global':
+            self.n_windows = int(np.floor(params['layer0']['size'] / window_size))
+        ## Define the depth of the network.
         depth = len(params.keys()) - 1 if self.latent_distribution != 'Gaussian' else len(params.keys()) - 2
+        ## Check if activations are correct.                
         if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Tanh'):
-            raise Exception('[ERROR] Missing tanh activation!')
-        for i in range(depth):
-            modules.append(FullyConnected(
-                ## Only can condition input (layer0).
-                input = (
-                    params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
-                ) if i == 0 else params[f'layer{i}']['size'],
-                output     = params[f'layer{i + 1}']['size'],
-                dropout    = params[f'layer{i}']['dropout'],
-                normalize  = params[f'layer{i}']['normalize'],
-                activation = params[f'layer{i}']['activation'],
-            ))
-        self.FCs = nn.Sequential(*modules)
-        if self.latent_distribution == 'Gaussian':
-            if params[f'layer{depth}']['activation'] != None:
-                print('[WARNING] Activation for Mu and Logvar features is not the identity.')
-            self.FCmu = FullyConnected(
-                input      = params[f'layer{depth}']['size'],
-                output     = params[f'layer{depth + 1}']['size'],
-                dropout    = params[f'layer{depth}']['dropout'],
-                normalize  = params[f'layer{depth}']['normalize'],
-                activation = params[f'layer{depth}']['activation'],
-            )
-            self.FClogvar = FullyConnected(
-                input      = params[f'layer{depth}']['size'],
-                output     = params[f'layer{depth + 1}']['size'],
-                dropout    = params[f'layer{depth}']['dropout'],
-                normalize  = params[f'layer{depth}']['normalize'],
-                activation = params[f'layer{depth}']['activation'],
-            )
+            raise Exception('[ERROR] Missing tanh activation!') 
+        if (self.latent_distribution == 'Gaussian') and (params[f'layer{depth}']['activation'] != None):
+            print('[WARNING] Activation for Mu and Logvar features is not the identity.')
+            
+        ## Shape global modules definitions.
+        if self.shape == 'global':
+            modules = []
+
+            for i in range(depth):
+                modules.append(FullyConnected(
+                    ## Only can condition input (layer0).
+                    input = (
+                        params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
+                    ) if i == 0 else params[f'layer{i}']['size'],
+                    output     = params[f'layer{i + 1}']['size'],
+                    dropout    = params[f'layer{i}']['dropout'],
+                    normalize  = params[f'layer{i}']['normalize'],
+                    activation = params[f'layer{i}']['activation'],
+                ))
+            self.FCs = nn.Sequential(*modules)
+            if self.latent_distribution == 'Gaussian':
+                self.FCmu = FullyConnected(
+                    input      = params[f'layer{depth}']['size'],
+                    output     = params[f'layer{depth + 1}']['size'],
+                    dropout    = params[f'layer{depth}']['dropout'],
+                    normalize  = params[f'layer{depth}']['normalize'],
+                    activation = params[f'layer{depth}']['activation'],
+                )
+                self.FClogvar = FullyConnected(
+                    input      = params[f'layer{depth}']['size'],
+                    output     = params[f'layer{depth + 1}']['size'],
+                    dropout    = params[f'layer{depth}']['dropout'],
+                    normalize  = params[f'layer{depth}']['normalize'],
+                    activation = params[f'layer{depth}']['activation'],
+                )
+        ## Shape window-based (independent) modules definitions
+        elif self.shape == 'window-based': ## TODO: Implement conditioned window-based
+            modules = {}
+            ## For each layer and for each window we define a FC matrix.
+            for i in range(depth):
+                for w in range(self.n_windows):
+                    ## If first layer0, we split the input size.
+                    ## Otherwise, we use the size defined in params.
+                    if i == 0:
+                        if w != self.n_windows - 1:
+                            wsize = self.window_size
+                        else: wsize = self.window_size + (params['layer0']['size'] % self.window_size)
+                    else: wsize = params[f'layer{i}']['size']
+                    modules[f'layer{i}_win{w}'] = FullyConnected(
+                        input      = wsize,
+                        output     = params[f'layer{i + 1}']['size'],
+                        dropout    = params[f'layer{i}']['dropout'],
+                        normalize  = params[f'layer{i}']['normalize'],
+                        activation = params[f'layer{i}']['activation'],
+                    )
+            ## We create funnels for each window.
+            self.funnel = []
+            for w in range(self.n_windows):
+                self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(depth)]))
+        elif self.shape == 'hybrid':
+            raise Exception('Not implemented.')
 
     def forward(self, x, c=None):
-        o = self.FCs(x if c is None else torch.cat([x, c], -1))
-        if self.latent_distribution == 'Gaussian':
-            o_mu = self.FCmu(o)
-            o_var = self.FClogvar(o)
-            return o_mu, o_var
-        else:
+        if self.shape == 'global':
+            ## Append the conditioning if desired.
+            ## If the latent space is discrete, we are done.
+            ## If not, we must parametrize.
+            o = self.FCs(x if c is None else torch.cat([x, c], -1))
+            if self.latent_distribution == 'Gaussian':
+                o_mu = self.FCmu(o)
+                o_var = self.FClogvar(o)
+                return o_mu, o_var
+            else: return o
+        elif self.shape == 'window-based': ## TODO: Implement conditioned window-based
+            os = [] ## Stores the outputs of each window.
+            for w in range(self.n_windows):
+                if w == self.n_windows - 1:
+                    x_windowed = x[:,:, w * self.window_size:]
+                else:
+                    x_windowed = x[:,:, w * self.window_size:(w + 1) * self.window_size]
+                ## Process each window with the corresponding funnel.
+                os.append(self.funnel[w](x_windowed))
+            ## Concat all outputs into a single o vector.
+            o = torch.cat(os, axis=-1)
             return o
+        else:
+            raise Exception('Not implemented.')
         
 class Quantizer(nn.Module):
     def __init__(self, latent_distribution, codebook = None):
@@ -121,7 +177,7 @@ class Quantizer(nn.Module):
         
 
 class Decoder(nn.Module):
-    def __init__(self, params, num_classes=None):
+    def __init__(self, params, num_classes=None, shape='global', window_size=None):
         super().__init__()
         
         modules = []
@@ -151,6 +207,7 @@ class AEgen(nn.Module):
         ## - window-based: independent MLPs by windows.
         ## - hybrid: independent MLP combined into one.
         self.shape = params['shape']
+        self.window_size = params['window_size'] if params['window_size'] is not None else None
         ## Latent space distrubution can be:
         ## - Gaussian: regular VAE.
         ## - Multi-Bernoulli: LBAE. http://proceedings.mlr.press/v119/fajtl20a/fajtl20a.pdf
@@ -163,14 +220,18 @@ class AEgen(nn.Module):
         self.encoder = Encoder(
             latent_distribution = self.latent_distribution,
             params=params['encoder'], 
-            num_classes=params['num_classes'] if conditional else None
+            num_classes=params['num_classes'] if conditional else None,
+            shape=self.shape,
+            window_size=self.window_size
         )
         ## Decoder is defined by:
         ## - Parameters: layers' definitions.
         ## - Num_classes: if conditional Decoder.
         self.decoder = Decoder(
             params=params['decoder'], 
-            num_classes=params['num_classes'] if conditional else None
+            num_classes=params['num_classes'] if conditional else None,
+            shape=self.shape,
+            window_size=self.window_size
         ) 
         ## Optionally: a quantizer.
         ## - Latent distribution.
