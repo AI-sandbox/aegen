@@ -32,7 +32,6 @@ class FullyConnected(nn.Module):
         o = self.FC(x)
         return o
 
-
 class Encoder(nn.Module):
     def __init__(self, latent_distribution, params, num_classes=None, shape='global', window_size=None, n_windows=None):
         super().__init__()
@@ -58,6 +57,7 @@ class Encoder(nn.Module):
                 raise Exception(f'[ERROR] The number of defined layers ({depth}) does not match ' +
                                 'the number of required layers ({np.log2(self.n_windows)}).')  
             self.window_size = int(np.floor(params['layer0']['size'] / self.n_windows))
+        else: raise Exception('Missing window_size and n_windows')
 
         ## Check if activations are correct.                
         if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Tanh'):
@@ -169,7 +169,6 @@ class Encoder(nn.Module):
                         )
                     )
                 nw //= 2
-            print(self.modules['group0'])
         else: raise Exception('Unknown shape.')
     
     def _binary_tree_path(window):
@@ -232,6 +231,7 @@ class Encoder(nn.Module):
                         wsize = self.params[f'layer{i}']['size']
                         w1 = x[..., w_id * wsize:(w_id + 1) * wsize]
                         w2 = x[..., (w_id + 1) * wsize:(w_id + 2) * wsize]
+                    ## Add nodes in binary tree
                     node = self.modules[group][w_id](w1) + self.modules[group][w_id + 1](w2)
                     aux.append(node)
                 ## Reduce number of windows on next layer
@@ -251,9 +251,22 @@ class Quantizer(nn.Module):
         ## Define the depth of the network.
         depth = len(params.keys()) - 1
         ## If shape is not global, define window size and number of windows.
-        self.window_size = window_size
-        if self.window_size is not None and self.shape != 'global':
-            self.n_windows = int(np.floor(params[f'layer{depth}']['size'] / self.window_size))
+        if window_size is not None:
+            self.window_size = window_size
+            if self.shape != 'global':
+                self.n_windows = int(np.floor(params[f'layer{depth}']['size'] / self.window_size))
+                
+        elif (n_windows is not None) and (self.shape == 'hybrid'):
+            self.n_windows = n_windows
+            if not ((self.n_windows & (self.n_windows - 1) == 0) and (self.n_windows != 0)):
+                raise Exception('[ERROR] The number of windows is not a power of 2!')
+            if np.log2(self.n_windows) != depth:
+                raise Exception(f'[ERROR] The number of defined layers ({depth}) does not match ' +
+                                'the number of required layers ({np.log2(self.n_windows)}).')  
+            self.window_size = int(np.floor(params['layer0']['size'] / self.n_windows))
+        else: raise Exception('Missing window_size and n_windows')
+            
+        ## For slitting into windows the bottleneck
         self.split_size = params['layer0']['size']
         
     def _return_code(self, ze):
@@ -302,9 +315,20 @@ class Decoder(nn.Module):
         ## Define the depth of the network.
         depth = len(params.keys()) - 1
         ## If shape is not global, define window size and number of windows.
-        self.window_size = window_size
-        if self.window_size is not None and self.shape != 'global':
-            self.n_windows = int(np.floor(params[f'layer{depth}']['size'] / self.window_size))
+        if window_size is not None:
+            self.window_size = window_size
+            if self.shape != 'global':
+                self.n_windows = int(np.floor(params[f'layer{depth}']['size'] / self.window_size))
+                
+        elif (n_windows is not None) and (self.shape == 'hybrid'):
+            self.n_windows = n_windows
+            if not ((self.n_windows & (self.n_windows - 1) == 0) and (self.n_windows != 0)):
+                raise Exception('[ERROR] The number of windows is not a power of 2!')
+            if np.log2(self.n_windows) != depth:
+                raise Exception(f'[ERROR] The number of defined layers ({depth}) does not match ' +
+                                'the number of required layers ({np.log2(self.n_windows)}).')  
+            self.window_size = int(np.floor(params[f'layer{depth}']['size'] / self.n_windows))
+        else: raise Exception('Missing window_size and n_windows')
         
         ## Shape global modules definitions.
         if self.shape == 'global':
@@ -347,9 +371,30 @@ class Decoder(nn.Module):
             self.split_size = params['layer0']['size']
             
         elif self.shape == 'hybrid':
-            #raise Exception('Not implemented.')
-            print('Hi')
-            
+            self.params = params
+            self.modules = {}
+            ## Define a binary tree of layers using a dict
+            nw = 2
+            for i in range(depth):
+                self.modules[f'group{i}'] = nn.ModuleList()
+                ## If last layerD, we split the input size.
+                ## Otherwise, we use the size defined in params.
+                for w in range(nw):
+                    if i == depth - 1:
+                        if w != self.n_windows - 1:
+                            wsize = self.window_size
+                        else: wsize = self.window_size + (params[f'layer{depth}']['size'] % self.window_size)
+                    else: wsize = params[f'layer{i + 1}']['size']
+                    self.modules[f'group{i}'].append(
+                        FullyConnected(
+                            input      = params[f'layer{i}']['size'],
+                            output     = wsize,
+                            dropout    = params[f'layer{i}']['dropout'],
+                            normalize  = params[f'layer{i}']['normalize'],
+                            activation = params[f'layer{i}']['activation'],
+                        )
+                    )
+                nw *= 2
         else: raise Exception('Unknown shape.')
 
     def forward(self, z, c=None):
@@ -364,8 +409,38 @@ class Decoder(nn.Module):
             o = torch.cat(os, axis=-1)
             return o
         elif self.shape == 'hybrid':
-            #raise Exception('Not implemented.')
-            return x
+            aux = [] ## Stores the outputs of each window.
+            ws = 2
+            for i, group in enumerate(self.modules.keys()):
+                # print(f'In group we have nodes in group {i}: {len(self.modules[group])}')
+                # print(f'Current num of window to split into: {ws}')
+                w_id_split = 0
+                for w_id in range(0,ws,2):
+                    # print(f'Current nodes: {w_id} and {w_id + 1}')
+                    ## Recompute sizes on each layer given params
+                    if i == 0: ## Forward the bottleneck completely
+                        w1 = w2 = z
+                    else:
+                        wsize = self.params[f'layer{i}']['size']
+                        w1 = z[..., w_id_split * wsize:(w_id_split + 1) * wsize]
+                        w2 = z[..., w_id_split * wsize:(w_id_split + 1) * wsize]
+                        # print(f'Shape of w1: {w1.shape}, sliced: [{w_id_split * wsize},{(w_id_split + 1) * wsize}]')
+                        # print(f'Shape of w2: {w2.shape}, sliced: [{w_id_split * wsize},{(w_id_split + 1) * wsize}]')
+                    ## Store nodes in aux
+                    node1 = self.modules[group][w_id](w1)
+                    # print(f'Shape of node1: {node1.shape}')
+                    node2 = self.modules[group][w_id + 1](w2)
+                    # print(f'Shape of node2: {node2.shape}')
+                    aux.append(node1)
+                    aux.append(node2)
+                    w_id_split += 1
+                ## Increment number of windows on next layer
+                ws *= 2
+                z = torch.cat(aux, axis=-1)
+                # print(f'Shape of out: {z.shape}')
+                aux = []
+            o = z
+            return o
         else: raise Exception('Unknown shape.')
 
 class AEgen(nn.Module):
