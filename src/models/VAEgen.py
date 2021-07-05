@@ -42,7 +42,7 @@ class Encoder(nn.Module):
         self.shape = shape
         
         ## Define the depth of the network.
-        depth = len(params.keys()) - 1 if self.latent_distribution != 'Gaussian' else len(params.keys()) - 2
+        depth = len(params.keys()) - 1
         
         ## If shape is not global, define window size and number of windows.
         if window_size is not None:
@@ -62,7 +62,7 @@ class Encoder(nn.Module):
         ## Check if activations are correct.                
         if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Tanh'):
             raise Exception('[ERROR] Missing tanh activation!') 
-        if (self.latent_distribution == 'Gaussian') and (params[f'layer{depth}']['activation'] != None):
+        if (self.latent_distribution == 'Gaussian') and (params[f'layer{depth - 1}']['activation'] != None):
             print('[WARNING] Activation for Mu and Logvar features is not the identity.')
             
         ## Shape global modules definitions.
@@ -83,18 +83,18 @@ class Encoder(nn.Module):
             self.FCs = nn.Sequential(*modules)
             if self.latent_distribution == 'Gaussian':
                 self.FCmu = FullyConnected(
-                    input      = params[f'layer{depth}']['size'],
-                    output     = params[f'layer{depth + 1}']['size'],
-                    dropout    = params[f'layer{depth}']['dropout'],
-                    normalize  = params[f'layer{depth}']['normalize'],
-                    activation = params[f'layer{depth}']['activation'],
+                    input      = params[f'layer{depth - 1}']['size'],
+                    output     = params[f'layer{depth}']['size'],
+                    dropout    = params[f'layer{depth - 1}']['dropout'],
+                    normalize  = params[f'layer{depth - 1}']['normalize'],
+                    activation = params[f'layer{depth - 1}']['activation'],
                 )
                 self.FClogvar = FullyConnected(
-                    input      = params[f'layer{depth}']['size'],
-                    output     = params[f'layer{depth + 1}']['size'],
-                    dropout    = params[f'layer{depth}']['dropout'],
-                    normalize  = params[f'layer{depth}']['normalize'],
-                    activation = params[f'layer{depth}']['activation'],
+                    input      = params[f'layer{depth - 1}']['size'],
+                    output     = params[f'layer{depth}']['size'],
+                    dropout    = params[f'layer{depth - 1}']['dropout'],
+                    normalize  = params[f'layer{depth - 1}']['normalize'],
+                    activation = params[f'layer{depth - 1}']['activation'],
                 )
         ## Shape window-based (independent) modules definitions
         elif self.shape == 'window-based': ## TODO: Implement conditioned window-based
@@ -146,11 +146,11 @@ class Encoder(nn.Module):
         ## Shape window-based (dependent) modules definitions
         elif self.shape == 'hybrid':
             self.params = params
-            self.modules = {}
+            self.dmodules = nn.ModuleDict()
             ## Define a binary tree of layers using a dict
             nw = self.n_windows
             for i in range(depth):
-                self.modules[f'group{i}'] = nn.ModuleList()
+                aux = nn.ModuleList()
                 ## If first layer0, we split the input size.
                 ## Otherwise, we use the size defined in params.
                 for w in range(nw):
@@ -159,7 +159,7 @@ class Encoder(nn.Module):
                             wsize = self.window_size
                         else: wsize = self.window_size + (params['layer0']['size'] % self.window_size)
                     else: wsize = params[f'layer{i}']['size']
-                    self.modules[f'group{i}'].append(
+                    aux.append(
                         FullyConnected(
                             input      = wsize,
                             output     = params[f'layer{i + 1}']['size'],
@@ -168,7 +168,9 @@ class Encoder(nn.Module):
                             activation = params[f'layer{i}']['activation'],
                         )
                     )
+                self.dmodules.update({f'group{i}': aux})      
                 nw //= 2
+            print(self.dmodules.keys())
         else: raise Exception('Unknown shape.')
     
     def _binary_tree_path(window):
@@ -217,7 +219,7 @@ class Encoder(nn.Module):
         elif self.shape == 'hybrid':
             aux = [] ## Stores the outputs of each window.
             ws = self.n_windows
-            for i, group in enumerate(self.modules.keys()):
+            for i, group in enumerate(self.dmodules.keys()):
                 for w_id in range(0,ws,2):
                     ## If input layer, resize last window if needed
                     if group == 'group0':
@@ -232,7 +234,7 @@ class Encoder(nn.Module):
                         w1 = x[..., w_id * wsize:(w_id + 1) * wsize]
                         w2 = x[..., (w_id + 1) * wsize:(w_id + 2) * wsize]
                     ## Add nodes in binary tree
-                    node = self.modules[group][w_id](w1) + self.modules[group][w_id + 1](w2)
+                    node = self.dmodules[group][w_id](w1) + self.dmodules[group][w_id + 1](w2)
                     aux.append(node)
                 ## Reduce number of windows on next layer
                 ws //= 2
@@ -299,7 +301,7 @@ class Quantizer(nn.Module):
                     ze_windowed = ze[..., w * self.split_size: (w + 1) * self.split_size]
                     zq.append(self._return_code(ze_windowed))
                 zq = torch.cat(zq, axis=-1)
-            else: zq = self._return_code(ze_windowed)
+            else: zq = self._return_code(ze)
         return zq
     
     def backward(self, grad_zq):
@@ -372,11 +374,11 @@ class Decoder(nn.Module):
             
         elif self.shape == 'hybrid':
             self.params = params
-            self.modules = {}
+            self.dmodules = nn.ModuleDict()
             ## Define a binary tree of layers using a dict
             nw = 2
             for i in range(depth):
-                self.modules[f'group{i}'] = nn.ModuleList()
+                aux = nn.ModuleList()
                 ## If last layerD, we split the input size.
                 ## Otherwise, we use the size defined in params.
                 for w in range(nw):
@@ -385,7 +387,7 @@ class Decoder(nn.Module):
                             wsize = self.window_size
                         else: wsize = self.window_size + (params[f'layer{depth}']['size'] % self.window_size)
                     else: wsize = params[f'layer{i + 1}']['size']
-                    self.modules[f'group{i}'].append(
+                    aux.append(
                         FullyConnected(
                             input      = params[f'layer{i}']['size'],
                             output     = wsize,
@@ -394,6 +396,7 @@ class Decoder(nn.Module):
                             activation = params[f'layer{i}']['activation'],
                         )
                     )
+                self.dmodules.update({f'group{i}' : aux})
                 nw *= 2
         else: raise Exception('Unknown shape.')
 
@@ -411,7 +414,7 @@ class Decoder(nn.Module):
         elif self.shape == 'hybrid':
             aux = [] ## Stores the outputs of each window.
             ws = 2
-            for i, group in enumerate(self.modules.keys()):
+            for i, group in enumerate(self.dmodules.keys()):
                 # print(f'In group we have nodes in group {i}: {len(self.modules[group])}')
                 # print(f'Current num of window to split into: {ws}')
                 w_id_split = 0
@@ -427,9 +430,9 @@ class Decoder(nn.Module):
                         # print(f'Shape of w1: {w1.shape}, sliced: [{w_id_split * wsize},{(w_id_split + 1) * wsize}]')
                         # print(f'Shape of w2: {w2.shape}, sliced: [{w_id_split * wsize},{(w_id_split + 1) * wsize}]')
                     ## Store nodes in aux
-                    node1 = self.modules[group][w_id](w1)
+                    node1 = self.dmodules[group][w_id](w1)
                     # print(f'Shape of node1: {node1.shape}')
-                    node2 = self.modules[group][w_id + 1](w2)
+                    node2 = self.dmodules[group][w_id + 1](w2)
                     # print(f'Shape of node2: {node2.shape}')
                     aux.append(node1)
                     aux.append(node2)
