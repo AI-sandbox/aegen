@@ -43,6 +43,7 @@ class Encoder(nn.Module):
         
         ## Define the depth of the network.
         depth = len(params.keys()) - 1
+        self.depth = depth
         
         ## If shape is not global, define window size and number of windows.
         if window_size is not None:
@@ -159,16 +160,44 @@ class Encoder(nn.Module):
                             wsize = self.window_size
                         else: wsize = self.window_size + (params['layer0']['size'] % self.window_size)
                     else: wsize = params[f'layer{i}']['size']
-                    aux.append(
-                        FullyConnected(
-                            input      = wsize,
-                            output     = params[f'layer{i + 1}']['size'],
-                            dropout    = params[f'layer{i}']['dropout'],
-                            normalize  = params[f'layer{i}']['normalize'],
-                            activation = params[f'layer{i}']['activation'],
+                    
+                    if (self.latent_distribution == 'Gaussian') and (i == depth - 1) and (nw == 2): 
+                        layer_mu = FullyConnected( ## mu
+                                input      = wsize,
+                                output     = params[f'layer{i + 1}']['size'],
+                                dropout    = params[f'layer{i}']['dropout'],
+                                normalize  = params[f'layer{i}']['normalize'],
+                                activation = params[f'layer{i}']['activation'],
+                            )
+                        layer_logvar = FullyConnected( ## logvar
+                                input      = wsize,
+                                output     = params[f'layer{i + 1}']['size'],
+                                dropout    = params[f'layer{i}']['dropout'],
+                                normalize  = params[f'layer{i}']['normalize'],
+                                activation = params[f'layer{i}']['activation'],
+                            )
+                    else: 
+                        aux.append( ## hidden
+                            FullyConnected(
+                                input      = wsize,
+                                output     = params[f'layer{i + 1}']['size'],
+                                dropout    = params[f'layer{i}']['dropout'],
+                                normalize  = params[f'layer{i}']['normalize'],
+                                activation = params[f'layer{i}']['activation'],
+                            )
                         )
-                    )
-                self.dmodules.update({f'group{i}': aux})      
+                print(i == depth - 1, i, depth)
+                print(nw)
+                print('+++++++')
+                if (self.latent_distribution == 'Gaussian') and (i == depth - 1) and (nw == 2): 
+                    self.dmodules.update({
+                        f'group{i}': nn.ModuleDict({
+                            'mu': nn.ModuleList([layer_mu] * 2), 
+                            'logvar': nn.ModuleList([layer_logvar] * 2)
+                        })
+                    })  
+                else:
+                    self.dmodules.update({f'group{i}': aux})      
                 nw //= 2
             print(self.dmodules.keys())
         else: raise Exception('Unknown shape.')
@@ -234,7 +263,12 @@ class Encoder(nn.Module):
                         w1 = x[..., w_id * wsize:(w_id + 1) * wsize]
                         w2 = x[..., (w_id + 1) * wsize:(w_id + 2) * wsize]
                     ## Add nodes in binary tree
-                    node = self.dmodules[group][w_id](w1) + self.dmodules[group][w_id + 1](w2)
+                    if (self.latent_distribution == 'Gaussian') and (group == f'group{self.depth - 1}'):
+                        node_mu = self.dmodules[group]['mu'][0](w1) + self.dmodules[group]['mu'][1](w2)
+                        node_logvar = self.dmodules[group]['logvar'][0](w1) + self.dmodules[group]['logvar'][1](w2)
+                        return node_mu, node_logvar
+                    else:
+                        node = self.dmodules[group][w_id](w1) + self.dmodules[group][w_id + 1](w2)
                     aux.append(node)
                 ## Reduce number of windows on next layer
                 ws //= 2
