@@ -34,18 +34,31 @@ class FullyConnected(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, latent_distribution, params, num_classes=None, shape='global', window_size=None):
+    def __init__(self, latent_distribution, params, num_classes=None, shape='global', window_size=None, n_windows=None):
         super().__init__()
         ## Define latent distribution.
         self.latent_distribution = latent_distribution
+        
         ## Define the shape of the Encoder.
         self.shape = shape
-        ## If shape is not global, define window size and number of windows.
-        self.window_size = window_size
-        if window_size is not None and shape != 'global':
-            self.n_windows = int(np.floor(params['layer0']['size'] / window_size))
+        
         ## Define the depth of the network.
         depth = len(params.keys()) - 1 if self.latent_distribution != 'Gaussian' else len(params.keys()) - 2
+        
+        ## If shape is not global, define window size and number of windows.
+        if window_size is not None:
+            self.window_size = window_size
+            if shape != 'global':
+                self.n_windows = int(np.floor(params['layer0']['size'] / window_size))
+        elif (n_windows is not None) and (self.shape == 'hybrid'):
+            self.n_windows = n_windows
+            if not ((self.n_windows & (self.n_windows - 1) == 0) and (self.n_windows != 0)):
+                raise Exception('[ERROR] The number of windows is not a power of 2!')
+            if np.log2(self.n_windows) != depth:
+                raise Exception(f'[ERROR] The number of defined layers ({depth}) does not match ' +
+                                'the number of required layers ({np.log2(self.n_windows)}).')  
+            self.window_size = int(np.floor(params['layer0']['size'] / self.n_windows))
+
         ## Check if activations are correct.                
         if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Tanh'):
             raise Exception('[ERROR] Missing tanh activation!') 
@@ -130,9 +143,41 @@ class Encoder(nn.Module):
                 for w in range(self.n_windows):
                     self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(depth)]))
 
+        ## Shape window-based (dependent) modules definitions
         elif self.shape == 'hybrid':
-            raise Exception('Not implemented.')
+            self.params = params
+            self.modules = {}
+            ## Define a binary tree of layers using a dict
+            nw = self.n_windows
+            for i in range(depth):
+                self.modules[f'group{i}'] = nn.ModuleList()
+                ## If first layer0, we split the input size.
+                ## Otherwise, we use the size defined in params.
+                for w in range(nw):
+                    if i == 0:
+                        if w != self.n_windows - 1:
+                            wsize = self.window_size
+                        else: wsize = self.window_size + (params['layer0']['size'] % self.window_size)
+                    else: wsize = params[f'layer{i}']['size']
+                    self.modules[f'group{i}'].append(
+                        FullyConnected(
+                            input      = wsize,
+                            output     = params[f'layer{i + 1}']['size'],
+                            dropout    = params[f'layer{i}']['dropout'],
+                            normalize  = params[f'layer{i}']['normalize'],
+                            activation = params[f'layer{i}']['activation'],
+                        )
+                    )
+                nw //= 2
+            print(self.modules['group0'])
         else: raise Exception('Unknown shape.')
+    
+    def _binary_tree_path(window):
+        ws, curr_w = [], window
+        for group in self.modules.keys():
+            curr_w //= 2
+            ws.append(self.modules[group][curr_w])
+        return ws
 
     def forward(self, x, c=None):
         if self.shape == 'global':
@@ -171,11 +216,34 @@ class Encoder(nn.Module):
                 o = torch.cat(os, axis=-1)
             return o
         elif self.shape == 'hybrid':
-            raise Exception('Not implemented.')
+            aux = [] ## Stores the outputs of each window.
+            ws = self.n_windows
+            for i, group in enumerate(self.modules.keys()):
+                for w_id in range(0,ws,2):
+                    ## If input layer, resize last window if needed
+                    if group == 'group0':
+                        if w_id == ws - 2:
+                            w1 = x[..., w_id * self.window_size:(w_id + 1) * self.window_size]
+                            w2 = x[..., (w_id + 1) * self.window_size:]
+                        else: 
+                            w1 = x[..., w_id * self.window_size:(w_id + 1) * self.window_size]
+                            w2 = x[..., (w_id + 1) * self.window_size:(w_id + 2) * self.window_size]
+                    else: ## Recompute window sizes (defined in params)
+                        wsize = self.params[f'layer{i}']['size']
+                        w1 = x[..., w_id * wsize:(w_id + 1) * wsize]
+                        w2 = x[..., (w_id + 1) * wsize:(w_id + 2) * wsize]
+                    node = self.modules[group][w_id](w1) + self.modules[group][w_id + 1](w2)
+                    aux.append(node)
+                ## Reduce number of windows on next layer
+                ws //= 2
+                x = torch.cat(aux, axis=-1)
+                aux = []
+            o = x
+            return o
         else: raise Exception('Unknown shape.')
         
 class Quantizer(nn.Module):
-    def __init__(self, latent_distribution, params, shape='global', codebook = None, window_size=None):
+    def __init__(self, latent_distribution, params, shape='global', codebook = None, window_size=None, n_windows=None):
         super().__init__()
         self.latent_distribution = latent_distribution
         self.codebook = codebook
@@ -190,9 +258,9 @@ class Quantizer(nn.Module):
         
     def _return_code(self, ze):
         if ze.size(-1) != self.codebook.size(-1):
-            print(ze.shape, self.codebook.shape)
             raise RuntimeError(
-                f'[Error] Invalid argument: ze.size(-1) ({ze.size(-1)}) must be equal to self.codebook.size(-1) ({self.codebook.size(-1)})'
+                f'[Error] Invalid argument: ze.size(-1) ({ze.size(-1)}) must \
+                be equal to self.codebook.size(-1) ({self.codebook.size(-1)})'
             )
         sq_norm = (torch.sum(ze**2, dim = -1, keepdim = True) 
                 + torch.sum(self.codebook**2, dim = 1)
@@ -227,7 +295,7 @@ class Quantizer(nn.Module):
         return grad_ze, None
         
 class Decoder(nn.Module):
-    def __init__(self, params, num_classes=None, shape='global', window_size=None):
+    def __init__(self, params, num_classes=None, shape='global', window_size=None, n_windows=None):
         super().__init__()
         ## Define the shape of the Encoder.
         self.shape = shape
@@ -279,7 +347,9 @@ class Decoder(nn.Module):
             self.split_size = params['layer0']['size']
             
         elif self.shape == 'hybrid':
-            raise Exception('Not implemented.')
+            #raise Exception('Not implemented.')
+            print('Hi')
+            
         else: raise Exception('Unknown shape.')
 
     def forward(self, z, c=None):
@@ -294,7 +364,8 @@ class Decoder(nn.Module):
             o = torch.cat(os, axis=-1)
             return o
         elif self.shape == 'hybrid':
-            raise Exception('Not implemented.')
+            #raise Exception('Not implemented.')
+            return x
         else: raise Exception('Unknown shape.')
 
 class AEgen(nn.Module):
@@ -306,6 +377,9 @@ class AEgen(nn.Module):
         ## - hybrid: independent MLP combined into one.
         self.shape = params['shape']
         self.window_size = params['window_size'] if params['window_size'] is not None else None
+        self.n_windows = params['n_windows'] if params['n_windows'] is not None else None
+        if self.window_size is not None and self.n_windows is not None:
+            raise Exception('Too many arguments.')
         ## Latent space distrubution can be:
         ## - Gaussian: regular VAE.
         ## - Multi-Bernoulli: LBAE. http://proceedings.mlr.press/v119/fajtl20a/fajtl20a.pdf
@@ -320,7 +394,8 @@ class AEgen(nn.Module):
             params=params['encoder'], 
             num_classes=params['num_classes'] if conditional else None,
             shape=self.shape,
-            window_size=self.window_size
+            window_size=self.window_size,
+            n_windows=self.n_windows
         )
         ## Decoder is defined by:
         ## - Parameters: layers' definitions.
@@ -329,7 +404,8 @@ class AEgen(nn.Module):
             params=params['decoder'], 
             num_classes=params['num_classes'] if conditional else None,
             shape=self.shape,
-            window_size=self.window_size
+            window_size=self.window_size,
+            n_windows=self.n_windows
         ) 
         ## Optionally: a quantizer.
         ## - Latent distribution.
@@ -346,7 +422,8 @@ class AEgen(nn.Module):
             codebook = self.codebook, 
             shape = self.shape, 
             params = params['decoder'],
-            window_size=self.window_size
+            window_size=self.window_size,
+            n_windows=self.n_windows
         )
     
     ## Variational Auto-encoder: Gaussian latent space
