@@ -186,9 +186,6 @@ class Encoder(nn.Module):
                                 activation = params[f'layer{i}']['activation'],
                             )
                         )
-                print(i == depth - 1, i, depth)
-                print(nw)
-                print('+++++++')
                 if (self.latent_distribution == 'Gaussian') and (i == depth - 1) and (nw == 2): 
                     self.dmodules.update({
                         f'group{i}': nn.ModuleDict({
@@ -199,7 +196,6 @@ class Encoder(nn.Module):
                 else:
                     self.dmodules.update({f'group{i}': aux})      
                 nw //= 2
-            print(self.dmodules.keys())
         else: raise Exception('Unknown shape.')
     
     def _binary_tree_path(window):

@@ -1,43 +1,51 @@
 model: 
+  shape: hybrid
+  n_windows: 8
+  window_size: null
+  distribution: Multi-Bernoulli
+  codebook_size: 25
   num_classes: 7
-  missing: 0
   encoder:
-    input:
-      size: 10000
+    layer0:
+      size: 10005
       dropout: 0
       normalize: true
       activation: ReLU
-    hidden1: 
-      size: 512
+    layer1: 
+      size: 1024
       dropout: null
       normalize: true
-      activation: null
-    hidden2: 
-      size: 64
+      activation: ReLU
+    layer2: 
+      size: 256
       dropout: null
-      normalize: null
-      activation: null
+      normalize: true
+      activation: Tanh
+    layer3: 
+      size: 64
   decoder: 
-    hidden2:
+    layer0:
       size: 64
       dropout: 0
       normalize: true
       activation: ReLU
-    hidden1:
-      size: 512
+    layer1:
+      size: 256
       dropout: 0
       normalize: true
-      activation: Sigmoid
-    output:
-      size: 10000
-      dropout: null
-      normalize: null
-      activation: null
+      activation: ReLU
+    layer2:
+      size: 1024
+      dropout: 0
+      normalize: true
+      activation: ReLU
+    layer3:
+      size: 10005
 
 hyperparams:
   epochs: 3000
   batch_size: 128
-  lr: 0.00001
+  lr: 0.0001
   beta: 1
   weight_decay: 0
   scheduler: 
