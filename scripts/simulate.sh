@@ -5,8 +5,8 @@ population=("EUR" "EAS" "AMR" "SAS" "AFR" "OCE" "WAS")
 for set in "${dataset[@]}"
 do mkdir -p $OUT_PATH/data/chr22/prepared/$set
     for pop in "${population[@]}"
-    do mkdir -p $OUT_PATH/data/chr22/prepared/$set/$pop; 
-       mkdir -p $OUT_PATH/data/chr22/prepared/$set/$pop/generations
+    do mkdir -p $OUT_PATH/data/human/chr22/prepared/$set/$pop; 
+       mkdir -p $OUT_PATH/data/human/chr22/prepared/$set/$pop/generations
     done
 done
 for ARGUMENT in "$@" 
@@ -44,8 +44,8 @@ ml load py-h5py/2.10.0_py36
 
 python3 $USER_PATH/src/utils/mapper.py
 if python3 $USER_PATH/src/pyadmix/admix.py \
-    $IN_PATH/data/chr22/ref_final_beagle_phased_1kg_hgdp_sgdp_chr22_hg19.vcf.gz \
-    $OUT_PATH/data/chr22/prepared/ $generations $individuals
+    $IN_PATH/data/human/chr22/ref_final_beagle_phased_1kg_hgdp_sgdp_chr22_hg19.vcf \
+    $OUT_PATH/data/human/chr22/prepared/ $generations $individuals
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi
 EOT

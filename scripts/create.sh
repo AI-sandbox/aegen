@@ -7,13 +7,13 @@ do
     VALUE=$(echo $ARGUMENT | cut -f2 -d=)   
     case "$KEY" in
             cluster)     cluster=${VALUE} ;;
-            individuals) individuals=${VALUE} ;;     
+            snps) snps=${VALUE} ;;     
             *)   
     esac    
 done
 if [[ -z $cluster ]]; then cluster=$CLUSTER; fi
-if [[ -z $individuals ]]; then echo "Missing individuals parameters."; exit 1; fi
-echo "[$CLUSTER] Generating datasets with $individuals individuals"
+if [[ -z $snps ]]; then echo "Missing SNPs parameters."; exit 1; fi
+echo "[$CLUSTER] Generating datasets with $snps SNPs"
 if [ "$cluster" == "SHERLOCK" ]; then
 sbatch <<EOT
 #!/bin/sh
@@ -21,8 +21,8 @@ sbatch <<EOT
 #SBATCH -p gpu
 #SBATCH -c 10
 #SBATCH -G 1
-#SBATCH --mem=32G
-#SBATCH -t 00:30:00
+#SBATCH --mem=240G
+#SBATCH -t 23:59:00
 #SBATCH -o $OUT_PATH/logs/sim.log
 #SBATCH -e $OUT_PATH/logs/sim.err
 
@@ -36,7 +36,7 @@ if python3 -c """
 from utils.assemblers import create_dataset; import logging;
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
-create_dataset(max_size=$individuals)
+create_dataset(max_size=$snps)
 """ 
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi
@@ -47,7 +47,7 @@ python3 -c """
 from utils.assemblers import create_dataset; import logging;
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
-create_dataset(max_size=$individuals)
+create_dataset(max_size=$snps)
 """
     then echo "[$CLUSTER] Success!"
     else echo "[$CLUSTER] Fail!"; fi
