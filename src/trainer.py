@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 from parser import create_parser
-from models.VAEgen import VAEgen
+from models.VAEgen import AEgen
 from models.losses import VAEloss, L1loss
 from models.initializers import init_xavier
 from utils.loader import loader 
@@ -26,20 +26,28 @@ log = logging.getLogger(__name__)
 def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=None):
 
     #======================== Set data ========================#
+    log.info('Setting data ...')
     tr_loader, vd_loader, ts_loader = data
-
+    log.info('Data set.')
     #======================== Set model ========================#
+    log.info('Setting model ...')
     model['body'].apply(init_xavier)
-    wandb.init(project='VAEgen')
+    log.info('Initializing wandb ...')
+    wandb.init(
+        project='AEgen',
+        dir=os.path.join(os.environ.get('OUT_PATH'), f'experiments/'),
+        # resume='allow',
+    )
     wandb.run.name = summary
     wandb.run.save()
-
+    log.info('Wandb set.')
     wandb.watch(model['body'])
-
+    log.info('Setting training mode ...')
     # Set to training mode
     model['body'].train()
-
+    log.info('Model set.')
     #======================== Prepare stats ========================#
+    log.info('Preparing stats ...')
     best_loss = np.inf
     best_epoch = 0
     datalen = len(tr_loader)
@@ -48,7 +56,7 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
     total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
     total_compression_ratio = []
     if model['imputation']: total_imputation_L1_loss = []
-
+    log.info('Stats prepared.')
     #======================== Start training loop ========================#
     log.info('Training loop starting now ...')
     for epoch in range(hyperparams['epochs']):
@@ -59,19 +67,20 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
         epoch_L1_loss, epoch_zeros_loss, epoch_ones_loss = [], [], []
         epoch_compression_ratio = []
         if model['imputation']: epoch_imputation_L1_loss = []
-
-        if optimizer['scheduler'] is not None: optimizer['scheduler'].step()
         
         for i, batch in enumerate(tr_loader):
 
-            snps_array = batch[0].to(device)
+            snps_array = batch[0].to(device)#.unsqueeze(1)
+            log.info(snps_array.shape)
             labels = batch[1].to(device) if model['architecture'] == 'C-VAE' else None
 
             if model['imputation']:
                 snps_reconstruction, latent_mu, latent_logvar, mask = model['body'](snps_array, labels)
                 imputation_L1_loss = F.l1_loss((snps_reconstruction[mask] > 0.5).float(), snps_array[mask], reduction='mean') * 100
             else:
-                snps_reconstruction, latent_mu, latent_logvar = model['body'](snps_array, labels)
+                latent_mu, latent_logvar = model['body'].encoder(snps_array, labels)
+                z = model['body'].reparametrize(latent_mu, latent_logvar)
+                snps_reconstruction = model['body'].decoder(z, labels)
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
 
@@ -111,6 +120,8 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
 
         total_compression_ratio.append(np.mean(epoch_compression_ratio[-stats['slide']:]))
         if model['imputation']: total_imputation_L1_loss.append(np.mean(epoch_imputation_L1_loss[-stats['slide']:]))
+            
+        if optimizer['scheduler'] is not None: optimizer['scheduler'].step(np.mean(epoch_vae_loss[-stats['slide']:]))
 
         wandb.log({
             'tr_VAE_loss': total_vae_loss[-1],
@@ -250,7 +261,9 @@ def validate(model, vd_loader, epoch, verbose):
                 snps_reconstruction, latent_mu, latent_logvar, mask = model['body'](snps_array, labels)
                 imputation_L1_loss =  F.l1_loss((snps_reconstruction[mask] > 0.5).float(), snps_array[mask], reduction='mean') * 100
             else:
-                snps_reconstruction, latent_mu, latent_logvar = model['body'](snps_array, labels)
+                latent_mu, latent_logvar = model['body'].encoder(snps_array, labels)
+                z = model['body'].reparametrize(latent_mu, latent_logvar)
+                snps_reconstruction = model['body'].decoder(z, labels)
 
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
@@ -329,55 +342,73 @@ if __name__ == '__main__':
         params = yaml.safe_load(f)
     model_params = params['model']
     hyperparams = params['hyperparams']
-    ksize=int(model_params['encoder']['input']['size'] / 1000)
+    ksize=int(model_params['encoder']['layer0']['size'] / 1000)
     
     #======================== Prepare data ========================#
-    IPATH = os.path.join(os.environ.get('IN_PATH'), f'{params["species"]}/data/chr{params["chr"]}/prepared')
+    IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{args.species}/chr{args.chr}/prepared')
     log.info('Loading data...')
-    for _loader, _set in zip(('tr_loader', 'vd_loader', 'ts_loader'), ('train', 'valid', 'test')):
-        exec(f'''
-            if {_set} == 'test': {_loader} = None
-            if ({_set} == 'test' and {bool(args.evolution)}) or ({_set} != 'test'):
-                {_loader} = loader(
-                    ipath={IPATH},
-                    batch_size={hyperparams['batch_size']}, 
-                    split_set={_set},
-                    ksize={ksize},
-                    only={args.only},
-                    conditional={args.conditional},
-                )
-        ''')
+    log.info('Loading TR data...')
+    tr_loader = loader(
+        ipath=IPATH,
+        batch_size=hyperparams['batch_size'], 
+        split_set='train',
+        ksize=ksize,
+        only=args.only,
+        conditional=args.conditional,
+    )
+    log.info(f'TR data loaded.')
+    log.info('Loading VD data...')
+    vd_loader = loader(
+        ipath=IPATH,
+        batch_size=hyperparams['batch_size'], 
+        split_set='valid',
+        ksize=ksize,
+        only=args.only,
+        conditional=args.conditional
+    )
+    log.info(f'VD data loaded.')
+    ts_loader = loader(
+        ipath=IPATH,
+        batch_size=hyperparams['batch_size'], 
+        split_set='test',
+        ksize=ksize,
+        only=args.only,
+        conditional=args.conditional
+    ) if bool(args.evolution) else None
     log.info('Data loaded ++')
     log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
     log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
     if bool(args.evolution): log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
-    
+    data = (tr_loader, vd_loader, ts_loader)
+    log.info(f'Data ready ++')
     #======================== Prepare model ========================#
-    model = VAEgen(
+    model = AEgen(
         params=model_params, 
         conditional=args.conditional,
-        imputation=args.imputation
+        imputation=args.imputation,
+        sample_mode=False,
     )
 
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     log.info(f'Using device: {device}')
     model_parallel = False
     if torch.cuda.device_count() > 1:
-        log.info(f"Using {torch.cuda.device_count()} GPUs")
         model, model_parallel = nn.DataParallel(model), True
+    log.info(f"Using {torch.cuda.device_count()} GPU(s)")
+    log.info(f'Sending model to device {torch.cuda.get_device_name()}')
     model.to(device)
 
     # Number of parameters used in the model
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log.info(f'Number of model parameters: {num_params}')
-
+    log.info('Model ready ++')
     #======================== Prepare optimizer ========================#
     optimizer = torch.optim.Adam(
         params=model.parameters(), 
         lr=hyperparams['lr'], 
         weight_decay=hyperparams['weight_decay']
     )
-
+    log.info(f'Optimizer ready ++')
     #======================== Prepare scheduler ========================#
     if hyperparams['scheduler'] is not None:
         if hyperparams['scheduler']['method'] == 'plateau':
@@ -408,11 +439,13 @@ if __name__ == '__main__':
             )
         else: raise Exception('Wrong definition for scheduler')
     else: lr_scheduler = None
-
+    log.info('Scheduler ready ++')
     #======================== Start training ========================#
+    log.info('Starting training...')
     train(
         model={
-            'architecture': 'VAE' if not args.conditional else 'C-VAE',
+            'architecture': model_params['shape'] + (' AE' if not args.conditional else ' C-AE'),
+            'distribution': model_params['distribution'],
             'body': model, 
             'parallel': model_parallel,
             'num_params': num_params,
@@ -422,7 +455,7 @@ if __name__ == '__main__':
             'body': optimizer,
             'scheduler': lr_scheduler
         },
-        data=(tr_loader, vd_loader, ts_loader),
+        data=data,
         hyperparams=hyperparams,
         stats={
             'epoch': 0,
