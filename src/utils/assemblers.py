@@ -158,7 +158,7 @@ def get_snps_by_pop(pop, split, max_size=5000, max_gen=None):
             aux = np.load(snps_arr, mmap_mode='r+')[:,:max_size].astype(bool)
             log.info(f'Generation {i+1} has {aux.shape[0]} individuals')
             if i == 0:
-                arr = np.empty((0, aux.shape[1]), int)
+                arr = np.empty((0, aux.shape[1]), bool)
             arr = np.vstack((arr, aux))
             del aux
             gc.collect()
@@ -182,8 +182,8 @@ def create_dataset(max_size=5000, max_gen=None, seed=123):
         X, Y = X[idxs], Y[idxs]
         log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
         h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/human/chr22/prepared/{split}/{split}{int(max_size/1000)}K.h5'), 'w')
-        h5f.create_dataset('snps', data=X)
-        h5f.create_dataset('populations', data=Y)
+        h5f.create_dataset('snps', data=X.astype(bool), dtype=np.dtype('bool'))
+        h5f.create_dataset('populations', data=Y.astype('uint8'), dtype=np.dtype('uint8'))
         h5f.close()
         log.info('Done.\n')
 

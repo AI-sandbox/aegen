@@ -50,7 +50,7 @@ def loader(ipath, batch_size, split_set='train', ksize=5, only=None, conditional
 
 if __name__ == '__main__':
     data = loader(
-        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/chr22/prepared'),
+        ipath=os.path.join(os.environ.get('IN_PATH'), 'data/human/chr22/prepared'),
         batch_size=64, 
         split_set='train',
         ksize=5
