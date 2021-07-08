@@ -28,7 +28,7 @@ sbatch <<EOT
 #SBATCH -p gpu
 #SBATCH -c 10
 #SBATCH -G 1
-#SBATCH --mem=64G
+#SBATCH --mem=180G
 #SBATCH --time=23:59:59
 #SBATCH -o $OUT_PATH/experiments/exp$experiment/exp$experiment.log
 #SBATCH -e $OUT_PATH/experiments/exp$experiment/exp$experiment.err
@@ -40,14 +40,19 @@ ml load py-pandas/1.0.3_py36
 ml load py-h5py/2.10.0_py36
 ml load py-scikit-learn/0.19.1_py36
 
+# -C GPU_MEM:16GB
+
 if python3 $USER_PATH/src/trainer.py \
+--species human \
+--chr 22 \
 --params $OUT_PATH/experiments/exp$experiment/params.yaml \
---experiment "[S] Run $experiment: Imputation (%) 50K 512-256" \
---verbose True \
+--experiment "[S] Run $experiment: chr22 hybrid(8w,1024,256,64)" \
+--num $experiment \
+--verbose False \
 --num $experiment \
 --evolution False \
 --conditional False \
---imputation True;
+--imputation False;
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi
 EOT
