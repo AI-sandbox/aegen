@@ -12,7 +12,7 @@ class FullyConnected(nn.Module):
         modules.append(nn.Linear(input, output))
         ## Normalize layer if desired.
         if normalize: ## TODO: BatchNorm
-            modules.append(nn.BatchNorm1d(1))
+            modules.append(nn.BatchNorm1d(output))
             
         ## Add activation function if desired.
         if activation is not None:
@@ -535,7 +535,7 @@ class AEgen(nn.Module):
         )
     
     ## Variational Auto-encoder: Gaussian latent space
-    def reparametrize(self, mu, logvar):
+    def reparametrize(self, mu, logvar, sample_mode=False):
         if self.shape == 'window-based':
             if self.training or sample_mode:
                 z = []

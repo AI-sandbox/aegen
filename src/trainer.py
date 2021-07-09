@@ -1,9 +1,11 @@
 import os
+import gc
 import time
 import json
 import yaml
 import wandb
 import torch
+import psutil
 import datetime
 import logging
 import numpy as np
@@ -17,31 +19,36 @@ from models.losses import VAEloss, L1loss
 from models.initializers import init_xavier
 from utils.loader import loader 
 from utils.decorators import timer 
-from utils.loggers import progress, latentPCA, saver
+from utils.loggers import progress, latentPCA, saver, system_info
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 @timer
-def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=None):
+def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader, summary=None, num=0, only=None, logging=None):
 
     #======================== Set data ========================#
-    log.info('Setting data ...')
-    tr_loader, vd_loader, ts_loader = data
-    log.info('Data set.')
+    #log.info('Setting data ...')
+    #tr_loader, vd_loader, ts_loader = data
+    #log.info('Data set.')
     #======================== Set model ========================#
     log.info('Setting model ...')
     model['body'].apply(init_xavier)
-    log.info('Initializing wandb ...')
-    wandb.init(
-        project='AEgen',
-        dir=os.path.join(os.environ.get('OUT_PATH'), f'experiments/'),
-        # resume='allow',
-    )
-    wandb.run.name = summary
-    wandb.run.save()
-    log.info('Wandb set.')
-    wandb.watch(model['body'])
+    if logging == 'wandb':
+        log.info('Initializing wandb ...')
+        system_info()
+        log.info('Setting environ variable ...')
+        os.environ["WANDB_START_METHOD"] = "thread"
+        wandb.init(
+            project='AEgen',
+            dir=os.path.join(os.environ.get('OUT_PATH'), f'experiments/'),
+            # resume='allow',
+        )
+        wandb.run.name = summary
+        wandb.run.save()
+        log.info('Wandb set.')
+        wandb.watch(model['body'])
+    system_info()
     log.info('Setting training mode ...')
     # Set to training mode
     model['body'].train()
@@ -71,7 +78,6 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
         for i, batch in enumerate(tr_loader):
 
             snps_array = batch[0].to(device)#.unsqueeze(1)
-            log.info(snps_array.shape)
             labels = batch[1].to(device) if model['architecture'] == 'C-VAE' else None
 
             if model['imputation']:
@@ -123,26 +129,27 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
             
         if optimizer['scheduler'] is not None: optimizer['scheduler'].step(np.mean(epoch_vae_loss[-stats['slide']:]))
 
-        wandb.log({
-            'tr_VAE_loss': total_vae_loss[-1],
-            'tr_rec_loss': total_rec_loss[-1],
-            'tr_KL_div': total_KL_div[-1],
-        })
-		
-        wandb.log({
-            'tr_L1_loss': total_L1_loss[-1],
-            'tr_zeros_loss': total_zeros_loss[-1],
-            'tr_ones_loss': total_ones_loss[-1],
-        })
-
-        wandb.log({
-            'compression_ratio': total_compression_ratio[-1],
-        })
-
-        if model['imputation']:
+        if logging == 'wandb':
             wandb.log({
-                'tr_imputation_L1_loss': total_imputation_L1_loss[-1],
+                'tr_VAE_loss': total_vae_loss[-1],
+                'tr_rec_loss': total_rec_loss[-1],
+                'tr_KL_div': total_KL_div[-1],
             })
+
+            wandb.log({
+                'tr_L1_loss': total_L1_loss[-1],
+                'tr_zeros_loss': total_zeros_loss[-1],
+                'tr_ones_loss': total_ones_loss[-1],
+            })
+
+            wandb.log({
+                'compression_ratio': total_compression_ratio[-1],
+            })
+
+            if model['imputation']:
+                wandb.log({
+                    'tr_imputation_L1_loss': total_imputation_L1_loss[-1],
+                })
 
         log.info(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
 
@@ -163,7 +170,7 @@ def train(model, optimizer, data, hyperparams, stats, summary=None, num=0, only=
                 state={
                     'architecture': model['architecture'],
                     'imputation': model['imputation'],
-                    'body': model['body'], 
+                    #'body': model['body'], 
                     'parallel': model['parallel'],
                     'num_params': model['num_params'],
                     'weights': model['body'].state_dict()
@@ -278,27 +285,28 @@ def validate(model, vd_loader, epoch, verbose):
 
             total_compression_ratio.append(compression_ratio.item())
             if model['imputation']: total_imputation_L1_loss.append(imputation_L1_loss.item())
-
-        wandb.log({
-            'vd_VAE_loss': np.mean(total_vae_loss),
-            'vd_rec_loss': np.mean(total_rec_loss),
-            'vd_KL_div': np.mean(total_KL_div),
-        })
         
-        wandb.log({
-            'vd_L1_loss': np.mean(total_L1_loss),
-            'vd_zeros_loss': np.mean(total_zeros_loss),
-            'vd_ones_loss': np.mean(total_ones_loss),
-        })
-
-        wandb.log({
-            'vd_compression_ratio': np.mean(total_compression_ratio),
-        })
-
-        if model['imputation']: 
+        if logging == 'wandb':
             wandb.log({
-                'vd_imputation_L1_loss': np.mean(total_imputation_L1_loss),
+                'vd_VAE_loss': np.mean(total_vae_loss),
+                'vd_rec_loss': np.mean(total_rec_loss),
+                'vd_KL_div': np.mean(total_KL_div),
             })
+
+            wandb.log({
+                'vd_L1_loss': np.mean(total_L1_loss),
+                'vd_zeros_loss': np.mean(total_zeros_loss),
+                'vd_ones_loss': np.mean(total_ones_loss),
+            })
+
+            wandb.log({
+                'vd_compression_ratio': np.mean(total_compression_ratio),
+            })
+
+            if model['imputation']: 
+                wandb.log({
+                    'vd_imputation_L1_loss': np.mean(total_imputation_L1_loss),
+                })
 
         if verbose:
             progress(
@@ -345,6 +353,7 @@ if __name__ == '__main__':
     ksize=int(model_params['encoder']['layer0']['size'] / 1000)
     
     #======================== Prepare data ========================#
+    system_info()
     IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{args.species}/chr{args.chr}/prepared')
     log.info('Loading data...')
     log.info('Loading TR data...')
@@ -357,6 +366,7 @@ if __name__ == '__main__':
         conditional=args.conditional,
     )
     log.info(f'TR data loaded.')
+    system_info()
     log.info('Loading VD data...')
     vd_loader = loader(
         ipath=IPATH,
@@ -367,6 +377,7 @@ if __name__ == '__main__':
         conditional=args.conditional
     )
     log.info(f'VD data loaded.')
+    system_info()
     ts_loader = loader(
         ipath=IPATH,
         batch_size=hyperparams['batch_size'], 
@@ -379,7 +390,6 @@ if __name__ == '__main__':
     log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
     log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
     if bool(args.evolution): log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
-    data = (tr_loader, vd_loader, ts_loader)
     log.info(f'Data ready ++')
     #======================== Prepare model ========================#
     model = AEgen(
@@ -401,6 +411,7 @@ if __name__ == '__main__':
     # Number of parameters used in the model
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log.info(f'Number of model parameters: {num_params}')
+    system_info()
     log.info('Model ready ++')
     #======================== Prepare optimizer ========================#
     optimizer = torch.optim.Adam(
@@ -442,6 +453,7 @@ if __name__ == '__main__':
     log.info('Scheduler ready ++')
     #======================== Start training ========================#
     log.info('Starting training...')
+    system_info()
     train(
         model={
             'architecture': model_params['shape'] + (' AE' if not args.conditional else ' C-AE'),
@@ -455,7 +467,6 @@ if __name__ == '__main__':
             'body': optimizer,
             'scheduler': lr_scheduler
         },
-        data=data,
         hyperparams=hyperparams,
         stats={
             'epoch': 0,
@@ -464,8 +475,12 @@ if __name__ == '__main__':
             'best_epoch': 0,
             'best_loss': np.inf,
         },
+        tr_loader=tr_loader,
+        vd_loader=vd_loader,
+        ts_loader=ts_loader,
         summary=args.experiment,
         num=args.num,
-        only=args.only
+        only=args.only,
+        logging='wandb',
     )
     #======================== End training ========================#

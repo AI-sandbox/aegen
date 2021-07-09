@@ -1,4 +1,5 @@
 import os
+import psutil
 import wandb
 import torch
 import numpy as np
@@ -82,3 +83,15 @@ def saver(obj, num, state):
     else: 
         log.error('Unknown object to store. Exiting...')
         exit(1)
+        
+def system_info():
+    log.info('\n\n'+'='*50)
+    log.info(f'Number of physical cores: {psutil.cpu_count(logical=False)}')
+    log.info(f'Current system-wide CPU utilization: {psutil.cpu_percent()}%')
+    mem = psutil.virtual_memory()
+    log.info(f'Total physical memory (exclusive swap): {psutil.virtual_memory().total // (2**30)} GB')
+    log.info(f'Total available memory: {psutil.virtual_memory().available // (2**30)} GB')
+    log.info(f'Percentage of used RAM: {psutil.virtual_memory().percent}%')
+    log.info(f'Percentage of available memory: {psutil.virtual_memory().available * 100 / psutil.virtual_memory().total}%')
+    log.info('='*50+'\n\n')
+    
