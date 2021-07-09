@@ -8,6 +8,7 @@ import logging
 from sklearn.decomposition import PCA
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import matplotlib
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -33,39 +34,58 @@ def progress(current, total, train=True, bar=True, time=None, **kwargs):
     
     print(f'{indicator} {bar_progress} {metrics}')
 
-def latentPCA(original, latent, labels, only=None):
+def latentPCA(latent, labels, original=None, only=None, n_populations=None):
+    print(f'ONLY: {only}')
+    if n_populations is not None:
+        cmap = matplotlib.cm.get_cmap('rainbow')
+        colors = [cmap(col) for col in np.linspace(0,1,n_populations)]
+        human_pops = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
+        pops = dict(zip(human_pops, colors))
+        pop_mapper = dict(zip(np.arange(0, len(pops.keys())), pops.keys()))
 
-    populations = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
-    colors = sns.color_palette("rainbow", len(populations))
-    pops = dict(zip(populations, colors))
-    pop_mapper = dict(zip(np.arange(0, len(pops.keys())), pops.keys()))
+        if (only is not None) or (not only):
+            c = [colors[x] for x in labels]
+        else: 
+            c = [pops[pop_mapper[only]] for x in labels]
 
     pca = PCA(n_components=2)
-    projected_original = pca.fit_transform(original)
+    if original is not None: projected_original = pca.fit_transform(original)
     projected_latent = pca.fit_transform(latent)
+    print(f'Original: {original}')
+    fig, ax = plt.subplots(1,2 if original is not None else 1, figsize=(20 if original is not None else 10, 8))
+    if original is not None:
+        ax[0].scatter(projected_original[:,0], projected_original[:,1], c=c , marker='.')
+        ax[0].set_xlabel('PC1')
+        ax[0].set_ylabel('PC2')
+        patches = []
+        for i, pop in enumerate(pops.keys()):
+            patches.append(mpatches.Patch(color=colors[i], label=pop))
+        ax[0].legend(handles=patches, bbox_to_anchor=(0. ,0.80 ,1.,0.3),loc=10,ncol=7,)
+        ax[0].spines['right'].set_visible(False)
+        ax[0].spines['top'].set_visible(False)
+        ax[0].set_title(f'(Original) PCA with {original.shape[1]}K SNPs')
 
-    fig, ax = plt.subplots(1,2, figsize=(20, 8))
-    ax[0].scatter(projected_original[:,0], projected_original[:,1], c=[colors[x] if only is None else pops[pop_mapper[only]] for x in labels] , marker='.')
-    ax[0].set_xlabel('PC1')
-    ax[0].set_ylabel('PC2')
-    patches = []
-    for i, pop in enumerate(pops.keys()):
-        patches.append(mpatches.Patch(color=colors[i], label=pop))
-    ax[0].legend(handles=patches, bbox_to_anchor=(0. ,0.80 ,1.,0.3),loc=10,ncol=7,)
-    ax[0].spines['right'].set_visible(False)
-    ax[0].spines['top'].set_visible(False)
-    ax[0].set_title(f'(Original) PCA with {original.shape[1]}K SNPs')
-
-    ax[1].scatter(projected_latent[:,0], projected_latent[:,1], c=[colors[x] if only is None else pops[pop_mapper[only]] for x in labels], marker='.')
-    ax[1].set_xlabel('PC1')
-    ax[1].set_ylabel('PC2')
-    patches = []
-    for i, pop in enumerate(pops.keys()):
-        patches.append(mpatches.Patch(color=colors[i], label=pop))
-    ax[1].legend(handles=patches, bbox_to_anchor=(0. ,0.80 ,1.,0.3),loc=10,ncol=7,)
-    ax[1].spines['right'].set_visible(False)
-    ax[1].spines['top'].set_visible(False)
-    ax[1].set_title(f'Latent space of VAE({latent.shape[1]}) projected with PCA')
+        ax[1].scatter(projected_latent[:,0], projected_latent[:,1], c=c, marker='.')
+        ax[1].set_xlabel('PC1')
+        ax[1].set_ylabel('PC2')
+        patches = []
+        for i, pop in enumerate(pops.keys()):
+            patches.append(mpatches.Patch(color=colors[i], label=pop))
+        ax[1].legend(handles=patches, bbox_to_anchor=(0. ,0.80 ,1.,0.3),loc=10,ncol=7,)
+        ax[1].spines['right'].set_visible(False)
+        ax[1].spines['top'].set_visible(False)
+        ax[1].set_title(f'Latent space of VAE({latent.shape[1]}) projected with PCA')
+    else:
+        ax.scatter(projected_latent[:,0], projected_latent[:,1], c=c, marker='.')
+        ax.set_xlabel('PC1')
+        ax.set_ylabel('PC2')
+        patches = []
+        for i, pop in enumerate(pops.keys()):
+            patches.append(mpatches.Patch(color=colors[i], label=pop))
+        ax.legend(handles=patches, bbox_to_anchor=(0. ,0.80 ,1.,0.3),loc=10,ncol=7,)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.set_title(f'Latent space of VAE({latent.shape[1]}) projected with PCA')
     
     return wandb.Image(fig)
 
