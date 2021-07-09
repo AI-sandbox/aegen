@@ -26,9 +26,10 @@ sbatch <<EOT
 #!/bin/sh
 #SBATCH --job-name=VAEgen$experiment
 #SBATCH -p gpu
+#SBATCH -C GPU_MEM:16GB
 #SBATCH -c 10
 #SBATCH -G 1
-#SBATCH --mem=180G
+#SBATCH --mem=240G
 #SBATCH --time=23:59:59
 #SBATCH -o $OUT_PATH/experiments/exp$experiment/exp$experiment.log
 #SBATCH -e $OUT_PATH/experiments/exp$experiment/exp$experiment.err
@@ -46,11 +47,11 @@ if python3 $USER_PATH/src/trainer.py \
 --species human \
 --chr 22 \
 --params $OUT_PATH/experiments/exp$experiment/params.yaml \
---experiment "[S] Run $experiment: chr22 hybrid(8w,1024,256,64)" \
+--experiment "[S] Run $experiment: human chr22" \
 --num $experiment \
---verbose False \
+--verbose True \
 --num $experiment \
---evolution False \
+--evolution True \
 --conditional False \
 --imputation False;
 then echo "[$CLUSTER] Success!"

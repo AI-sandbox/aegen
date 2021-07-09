@@ -23,6 +23,11 @@ class SNPs(Dataset):
         self.snps = h5f['snps'][:].astype(float)
         self.populations = h5f['populations'][:].astype(int)
         h5f.close()
+        
+        # Metadata
+        self.n_samples = self.snps.shape[0]
+        self.n_snps = self.snps.shape[-1]
+        self.n_populations = len(np.unique(self.populations))
 
         if only is not None:
             pop_idx = np.where(np.asarray(self.populations) == only)[0]
@@ -46,10 +51,15 @@ def loader(ipath, batch_size, split_set='train', ksize=5, only=None, conditional
     if only is not None and conditional: raise Exception('Conditional VAE with a unique population.')
     dataset = SNPs(ipath=ipath, split_set=split_set, ksize=ksize, only=only, conditional=conditional)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
-    return dataloader
+    metadata = {
+        'n_samples' : dataset.n_samples,
+        'n_snps' : dataset.n_snps,
+        'n_populations' : dataset.n_populations
+    }
+    return dataloader, metadata
 
 if __name__ == '__main__':
-    data = loader(
+    data, _ = loader(
         ipath=os.path.join(os.environ.get('IN_PATH'), 'data/human/chr22/prepared'),
         batch_size=64, 
         split_set='train',

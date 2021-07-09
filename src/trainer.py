@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 @timer
-def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader, summary=None, num=0, only=None, logging=None):
+def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader, summary=None, num=0, only=None, monitor=None, metadata=None):
 
     #======================== Set data ========================#
     #log.info('Setting data ...')
@@ -34,7 +34,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
     #======================== Set model ========================#
     log.info('Setting model ...')
     model['body'].apply(init_xavier)
-    if logging == 'wandb':
+    if monitor == 'wandb':
         log.info('Initializing wandb ...')
         system_info()
         log.info('Setting environ variable ...')
@@ -89,6 +89,15 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 snps_reconstruction = model['body'].decoder(z, labels)
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
+            
+            del snps_array
+            del labels
+            del latent_mu
+            del latent_logvar
+            del z
+            del snps_reconstruction
+            gc.collect()
+            torch.cuda.empty_cache()
 
             # Backpropagation
             optimizer['body'].zero_grad()
@@ -129,7 +138,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             
         if optimizer['scheduler'] is not None: optimizer['scheduler'].step(np.mean(epoch_vae_loss[-stats['slide']:]))
 
-        if logging == 'wandb':
+        if monitor == 'wandb':
             wandb.log({
                 'tr_VAE_loss': total_vae_loss[-1],
                 'tr_rec_loss': total_rec_loss[-1],
@@ -154,15 +163,23 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         log.info(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
 
         if model['imputation']: 
-            vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss, vd_imputation_L1_loss = validate(model, vd_loader, epoch, stats['verbose'])
+            vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss, vd_imputation_L1_loss = validate(model, vd_loader, epoch, stats['verbose'], monitor=monitor)
         else:
-            vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss = validate(model, vd_loader, epoch, stats['verbose'])
+            vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss = validate(model, vd_loader, epoch, stats['verbose'], monitor=monitor)
 
-        if (ts_loader is not None) and (epoch % 100 == 0): #and (epoch != 0):
+        if (ts_loader is not None) and (epoch % 150 == 0): #and (epoch != 0):
             log.info('Testing...')
             conditional = (model['architecture'] == 'C-VAE')
-            test(model, ts_loader, epoch, only, conditional)
-        
+            test(
+                model=model, 
+                ts_loader=ts_loader, 
+                epoch=epoch, 
+                metadata=metadata, 
+                only=only, 
+                conditional=conditional, 
+                monitor=monitor
+            )
+            
         if bool(vd_vae_loss[-1] < best_loss):
             saver(
                 obj='model', 
@@ -245,7 +262,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
     print(f'Training finished in {time.time() - ini}s.')
 
 @timer
-def validate(model, vd_loader, epoch, verbose):
+def validate(model, vd_loader, epoch, verbose, monitor=None):
 
     # Set to evaluation mode
     model['body'].eval()
@@ -274,6 +291,15 @@ def validate(model, vd_loader, epoch, verbose):
 
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
+            
+            del snps_array
+            del labels
+            del latent_mu
+            del latent_logvar
+            del z
+            del snps_reconstruction
+            gc.collect()
+            torch.cuda.empty_cache()
 
             total_vae_loss.append(loss.item())
             total_rec_loss.append(rec_loss.item())
@@ -286,7 +312,7 @@ def validate(model, vd_loader, epoch, verbose):
             total_compression_ratio.append(compression_ratio.item())
             if model['imputation']: total_imputation_L1_loss.append(imputation_L1_loss.item())
         
-        if logging == 'wandb':
+        if monitor == 'wandb':
             wandb.log({
                 'vd_VAE_loss': np.mean(total_vae_loss),
                 'vd_rec_loss': np.mean(total_rec_loss),
@@ -320,7 +346,7 @@ def validate(model, vd_loader, epoch, verbose):
         else: return total_vae_loss, total_rec_loss, total_KL_div, total_L1_loss, total_zeros_loss, total_ones_loss
 
 @timer
-def test(model, ts_loader, epoch, only=None, conditional=False):
+def test(model, ts_loader, epoch, metadata, show_original=False, only=None, conditional=False, monitor=None):
 
     # Set to evaluation mode
     model['body'].eval()
@@ -329,17 +355,33 @@ def test(model, ts_loader, epoch, only=None, conditional=False):
     # latent = np.empty((0, model['body'].module.encoder.FCmu.FC[0].out_features if model['parallel'] else model['body'].encoder.FCmu.FC[0].out_features), int)
     labels = torch.Tensor([])
 
-
     for i, batch in enumerate(ts_loader):
         original = np.vstack((original, batch[0] if not conditional else (torch.cat([batch[0], batch[1].float()], 1))))
         labels = torch.cat((labels, batch[1].float() if not conditional else (np.argmax(batch[1].float(), axis=1))))
+        if i == 5000: break
+    
     original = torch.from_numpy(original).float()
     mu, _ = model['body'].module.encoder(original.to(device)) if model['parallel'] else model['body'].encoder(original.to(device))
     latent = mu.detach().cpu().squeeze(0).numpy().astype(float)
-
-    fig = latentPCA(original, latent, labels.int(), only=only)
-    wandb.log({f"Latent space at epoch {epoch}": fig})
+    log.info(f"Num of pops: {metadata['ts_metadata']['n_populations']}")
+    print(f'Show original: {show_original}')
+    fig = latentPCA(
+        latent=latent, 
+        labels=labels.int(), 
+        original=original if show_original else None,
+        only=only, 
+        n_populations=metadata['ts_metadata']['n_populations']
+    )
+    if monitor == 'wandb': wandb.log({f"Latent space at epoch {epoch}": fig})
+    plt.show()
     plt.close('all')
+    
+    del original
+    del labels
+    del latent
+    del _
+    gc.collect()
+    torch.cuda.empty_cache()
 
 if __name__ == '__main__':
 
@@ -352,12 +394,20 @@ if __name__ == '__main__':
     hyperparams = params['hyperparams']
     ksize=int(model_params['encoder']['layer0']['size'] / 1000)
     
+    def summary_net(exp, species, chr, params):
+        shape = params['shape'].capitalize()
+        layer_sizes = [str(params['encoder'][layer]['size']) for layer in params['encoder'].keys()]
+        name = f'[{exp}] {species.capitalize()} chr{chr}: {shape}({",".join(layer_sizes)})'
+        return name
+    
+    summary = summary_net(args.num, args.species, args.chr, model_params)
+    
     #======================== Prepare data ========================#
     system_info()
     IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{args.species}/chr{args.chr}/prepared')
     log.info('Loading data...')
     log.info('Loading TR data...')
-    tr_loader = loader(
+    tr_loader, tr_metadata = loader(
         ipath=IPATH,
         batch_size=hyperparams['batch_size'], 
         split_set='train',
@@ -368,7 +418,7 @@ if __name__ == '__main__':
     log.info(f'TR data loaded.')
     system_info()
     log.info('Loading VD data...')
-    vd_loader = loader(
+    vd_loader, vd_metadata = loader(
         ipath=IPATH,
         batch_size=hyperparams['batch_size'], 
         split_set='valid',
@@ -378,7 +428,7 @@ if __name__ == '__main__':
     )
     log.info(f'VD data loaded.')
     system_info()
-    ts_loader = loader(
+    ts_loader, ts_metadata = loader(
         ipath=IPATH,
         batch_size=hyperparams['batch_size'], 
         split_set='test',
@@ -390,6 +440,11 @@ if __name__ == '__main__':
     log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
     log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
     if bool(args.evolution): log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
+    if (tr_metadata['n_populations'] != vd_metadata['n_populations']) or (tr_metadata['n_populations'] != ts_metadata['n_populations']) or (vd_metadata['n_populations'] != ts_metadata['n_populations']):
+        log.info(f'[WARNING] Missing populations:')
+        log.info(f"\tTR SET has {tr_metadata['n_populations']} populations.")
+        log.info(f"\tVD SET has {vd_metadata['n_populations']} populations.")
+        log.info(f"\tTS SET has {ts_metadata['n_populations']} populations.")
     log.info(f'Data ready ++')
     #======================== Prepare model ========================#
     model = AEgen(
@@ -462,6 +517,7 @@ if __name__ == '__main__':
             'parallel': model_parallel,
             'num_params': num_params,
             'imputation': args.imputation,
+            'gpu': torch.cuda.get_device_name(),
         }, 
         optimizer={
             'body': optimizer,
@@ -478,9 +534,14 @@ if __name__ == '__main__':
         tr_loader=tr_loader,
         vd_loader=vd_loader,
         ts_loader=ts_loader,
-        summary=args.experiment,
+        metadata={
+            'tr_metadata' : tr_metadata,
+            'vd_metadata' : vd_metadata,
+            'ts_metadata' : ts_metadata,
+        },
+        summary=summary,
         num=args.num,
         only=args.only,
-        logging='wandb',
+        monitor='wandb',
     )
     #======================== End training ========================#
