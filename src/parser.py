@@ -15,6 +15,7 @@ def create_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--species', 
         type=str, 
+        choices=['human', 'canid'],
         default='human', 
         metavar='STR',
         help='SNP data species: [human], [canid]'

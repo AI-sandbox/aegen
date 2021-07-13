@@ -70,7 +70,7 @@ class Encoder(nn.Module):
         if self.shape == 'global':
             modules = []
 
-            for i in range(depth):
+            for i in range(depth - 1 if self.latent_distribution == 'Gaussian' else depth):
                 modules.append(FullyConnected(
                     ## Only can condition input (layer0).
                     input = (

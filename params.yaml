@@ -1,7 +1,7 @@
 ## Model architecture.
 model: 
   ## Shape can be: [global, window-based, hybrid].
-  shape: window-based
+  shape: global
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
@@ -42,7 +42,6 @@ model:
   ## [size] defines the input shape tensor to the layer.
   ## The actual size of the param matrix is [size_{i}] x [size_{i+1}].
   ## The last layer has only one parameter: [size].
-  encoder:
   decoder: 
     layer0:
       size: 64
@@ -88,7 +87,7 @@ hyperparams:
     ## Scheduler sets the rate on which validation is done. E.g.:
     ## 1: validation is done at the end of each epoch.
     ## 100: validation is done each 100 epochs.
-    scheduler: 20
+    scheduler: 10
   ## TS simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   testing:
