@@ -12,7 +12,8 @@ do
     esac    
 done
 if [[ -z $cluster ]]; then cluster=$CLUSTER; fi
-if [[ -z $snps ]]; then echo "Missing SNPs parameters."; exit 1; fi
+#if [[ -z $snps ]]; then echo "Missing SNPs parameters."; exit 1; fi
+if [[ -z $snps ]]; then snps=317408; fi
 echo "[$CLUSTER] Generating datasets with $snps SNPs"
 if [ "$cluster" == "SHERLOCK" ]; then
 sbatch <<EOT

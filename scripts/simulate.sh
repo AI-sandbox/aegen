@@ -1,29 +1,33 @@
 #!/bin/bash
 source ini.sh
-dataset=("train" "valid" "test")
-population=("EUR" "EAS" "AMR" "SAS" "AFR" "OCE" "WAS")
-for set in "${dataset[@]}"
-do mkdir -p $OUT_PATH/data/chr22/prepared/$set
-    for pop in "${population[@]}"
-    do mkdir -p $OUT_PATH/data/human/chr22/prepared/$set/$pop; 
-       mkdir -p $OUT_PATH/data/human/chr22/prepared/$set/$pop/generations
-    done
-done
 for ARGUMENT in "$@" 
 do
     KEY=$(echo $ARGUMENT | cut -f1 -d=)
     VALUE=$(echo $ARGUMENT | cut -f2 -d=)   
     case "$KEY" in
             cluster)     cluster=${VALUE} ;;
+            species)     species=${VALUE} ;;
             generations) generations=${VALUE} ;;  
             individuals) individuals=${VALUE} ;;     
             *)   
     esac    
 done
 if [[ -z $cluster ]]; then cluster=$CLUSTER; fi
-if [[ -z $generations ]]; then echo "Missing generations parameters."; exit 1; fi
-if [[ -z $individuals ]]; then echo "Missing individuals parameters."; exit 1; fi
-echo "[$CLUSTER] Generating $generations generations with $individuals individuals in each population"
+if [[ -z $species ]]; then echo "Missing species. Exiting..."; exit 1; fi
+if [[ -z $generations ]]; then echo "Missing generations parameters. Exiting..."; exit 1; fi
+if [[ -z $individuals ]]; then echo "Missing individuals parameters. Exiting..."; exit 1; fi
+echo "[$CLUSTER] Generating $generations generations with $species $individuals individuals in each population"
+
+dataset=("train" "valid" "test")
+population=("EUR" "EAS" "AMR" "SAS" "AFR" "OCE" "WAS")
+for set in "${dataset[@]}"
+do mkdir -p $OUT_PATH/data/$species/chr22/prepared/$set
+    for pop in "${population[@]}"
+    do mkdir -p $OUT_PATH/data/$species/chr22/prepared/$set/$pop; 
+       mkdir -p $OUT_PATH/data/$species/chr22/prepared/$set/$pop/generations
+    done
+done
+
 cd $USER_PATH/src
 if [ "$cluster" == "SHERLOCK" ]; then
 sbatch <<EOT
@@ -42,7 +46,7 @@ ml load py-numpy/1.18.1_py36
 ml load py-pandas/1.0.3_py36
 ml load py-h5py/2.10.0_py36
 
-python3 $USER_PATH/src/utils/mapper.py
+python3 $USER_PATH/src/utils/mapper.py --species $species
 if python3 $USER_PATH/src/pyadmix/admix.py \
     $IN_PATH/data/human/chr22/ref_final_beagle_phased_1kg_hgdp_sgdp_chr22_hg19.vcf \
     $OUT_PATH/data/human/chr22/prepared/ $generations $individuals

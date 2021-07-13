@@ -180,12 +180,22 @@ def create_dataset(max_size=5000, max_gen=None, seed=123):
         idxs = np.arange(len(X))
         np.random.shuffle(idxs)
         X, Y = X[idxs], Y[idxs]
+        
         log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
-        h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/human/chr22/prepared/{split}/{split}{int(max_size/1000)}K.h5'), 'w')
+        h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/human/chr22/prepared/{split}/{split}{int(max_size/1000)}K_orig.h5'), 'w')
         h5f.create_dataset('snps', data=X.astype(bool), dtype=np.dtype('bool'))
         h5f.create_dataset('populations', data=Y.astype('uint8'), dtype=np.dtype('uint8'))
         h5f.close()
         log.info('Done.\n')
+        
+        if split == 'train':
+            X, Y = X[:25000,], Y[:25000]
+            log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
+            h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/human/chr22/prepared/{split}/{split}{int(max_size/1000)}K.h5'), 'w')
+            h5f.create_dataset('snps', data=X.astype(bool), dtype=np.dtype('bool'))
+            h5f.create_dataset('populations', data=Y.astype('uint8'), dtype=np.dtype('uint8'))
+            h5f.close()
+            log.info('Done.\n')
 
 if __name__ == '__main__':
     npy2hdf5(
