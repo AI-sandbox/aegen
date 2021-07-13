@@ -27,16 +27,17 @@ if __name__ == '__main__':
     hyperparams = params['hyperparams']
     ksize=int(model_params['encoder']['layer0']['size'] / 1000)
     
-    def summary_net(exp, species, chr, params, conditional):
-        if (params['num_classes'] is not None) and conditional:
-            shape = 'C-'+params['shape']
+    def summary_net(exp, species, chr, model_params, hyperparams, conditional):
+        if (model_params['num_classes'] is not None) and conditional:
+            shape = 'C-'+model_params['shape']
         else:
-            shape = params['shape'].capitalize()
-        layer_sizes = [str(params['encoder'][layer]['size']) for layer in params['encoder'].keys()]
-        name = f'[{exp}] {species.capitalize()} chr{chr}: {shape}({",".join(layer_sizes)})'
+            shape = model_params['shape'].capitalize()
+        layer_sizes = [str(model_params['encoder'][layer]['size']) for layer in model_params['encoder'].keys()]
+        hyper = 'optimizer {hyperparams["optimizer"]["algorithm"]} with lr={hyperparams["optimizer"]["lr"]} and decay={hyperparams["optimizer"]["weight_decay"]}'
+        name = f'[{exp}] {species.capitalize()} chr{chr}: {shape}({",".join(layer_sizes)}), {hyper}'
         return name
     
-    summary = summary_net(args.num, args.species, args.chr, model_params, args.conditional)
+    summary = summary_net(args.num, args.species, args.chr, model_params, hyperparams, args.conditional)
     
     #======================== Prepare data ========================#
     system_info()
@@ -111,11 +112,27 @@ if __name__ == '__main__':
     system_info()
     log.info('Model ready ++')
     #======================== Prepare optimizer ========================#
-    optimizer = torch.optim.Adam(
-        params=model.parameters(), 
-        lr=hyperparams['lr'], 
-        weight_decay=hyperparams['weight_decay']
-    )
+    if hyperparams['optimizer'] is not None:
+        if hyperparams['optimizer']['algorithm'] == 'Adam':
+            optimizer = torch.optim.Adam(
+            params=model.parameters(), 
+            lr=hyperparams['optimizer']['lr'], 
+            weight_decay=hyperparams['optimizer']['weight_decay']
+        )
+        elif hyperparams['optimizer']['algorithm'] == 'AdamW':
+            optimizer = torch.optim.AdamW(
+            params=model.parameters(), 
+            lr=hyperparams['optimizer']['lr'], 
+            weight_decay=hyperparams['optimizer']['weight_decay']
+        )
+        elif hyperparams['optimizer']['algorithm'] == 'SparseAdam':
+            optimizer = torch.optim.SparseAdam(
+            params=model.parameters(), 
+            lr=hyperparams['optimizer']['lr'], 
+            weight_decay=hyperparams['optimizer']['weight_decay']
+        )
+        else: raise Exception('Unknown optimization algorithm')
+    else: raise Exception('Missing optimizer')
     log.info(f'Optimizer ready ++')
     #======================== Prepare scheduler ========================#
     if hyperparams['scheduler'] is not None:
@@ -163,6 +180,7 @@ if __name__ == '__main__':
             'gpu': torch.cuda.get_device_name(),
         }, 
         optimizer={
+            'algorithm': hyperparams['optimizer']['algorithm'],
             'body': optimizer,
             'scheduler': lr_scheduler
         },

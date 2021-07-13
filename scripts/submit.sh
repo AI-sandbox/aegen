@@ -24,9 +24,8 @@ chmod +rwx $OUT_PATH/experiments/exp$experiment/exp$experiment.log
 if [ "$cluster" == "SHERLOCK" ]; then
 sbatch <<EOT
 #!/bin/sh
-#SBATCH --job-name=VAEgen$experiment
+#SBATCH --job-name=AEgen$experiment
 #SBATCH -p gpu
-#SBATCH -C GPU_MEM:16GB
 #SBATCH -c 10
 #SBATCH -G 1
 #SBATCH --mem=240G
@@ -51,7 +50,7 @@ if python3 $USER_PATH/src/trainer.py \
 --num $experiment \
 --verbose True \
 --num $experiment \
---evolution True \
+--evolution False \
 --conditional False \
 --imputation False;
 then echo "[$CLUSTER] Success!"

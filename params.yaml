@@ -1,7 +1,7 @@
 ## Model architecture.
 model: 
   ## Shape can be: [global, window-based, hybrid].
-  shape: global
+  shape: window-based
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
@@ -65,40 +65,43 @@ model:
 hyperparams:
   epochs: 2000
   batch_size: 128
-  lr: 0.0001
   beta: 1
-  weight_decay: 0
+  ## Optimizer algorithm can be: [Adam, AdamW, SparseAdam].
+  optimizer:
+       algorithm: SparseAdam
+       lr: 0.001
+       weight_decay: 0
   ## Scheduler can be: [null, plateau, step, multistep, exponential].
   scheduler: 
-    method: plateau
-    factor: 0.1
-    patience: 5
-    threshold: 0.0001
-    mode: rel
+       method: plateau
+       factor: 0.1
+       patience: 5
+       threshold: 0.0001
+       mode: rel
   ## TR simulation can be: [offline, online].
   ## [offline] loads a dataset from disk.
   ## [online] performs simulation on-the-fly.
   training:
-    simulation: offline
+       simulation: offline
   ## VD simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   validation:
-    simulation: offline
-    ## Scheduler sets the rate on which validation is done. E.g.:
-    ## 1: validation is done at the end of each epoch.
-    ## 100: validation is done each 100 epochs.
-    scheduler: 10
+       simulation: offline
+       ## Scheduler sets the rate on which validation is done. E.g.:
+       ## 1: validation is done at the end of each epoch.
+       ## 100: validation is done each 100 epochs.
+       scheduler: 10
   ## TS simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   testing:
-    simulation: offline
-    ## Scheduler sets the rate on which testing is done. E.g.:
-    ## 1: testing is done at the end of each epoch.
-    ## 100: testing is done each 100 epochs.
-    scheduler: 150
+      simulation: offline
+      ## Scheduler sets the rate on which testing is done. E.g.:
+      ## 1: testing is done at the end of each epoch.
+      ## 100: testing is done each 100 epochs.
+      scheduler: 150
   ## Checkpoint params.
   checkpointing:
-    ## Scheduler sets the rate on which checkpointing is done. E.g.:
-    ## 1: checkpointing is done at the end of each epoch.
-    ## 100: checkpointing is done each 100 epochs.
+      ## Scheduler sets the rate on which checkpointing is done. E.g.:
+      ## 1: checkpointing is done at the end of each epoch.
+      ## 100: checkpointing is done each 100 epochs.
       scheduler: 10

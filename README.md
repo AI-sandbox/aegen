@@ -1,2 +1,2 @@
-# VAEgen
-Variational Autoencoder for genomic data simulation.
+# AEgen
+Autoencoders for genomic data compression, classification, imputation, phasing and simulation.
