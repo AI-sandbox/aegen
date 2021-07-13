@@ -1,28 +1,48 @@
+## Model architecture.
 model: 
-  shape: hybrid
-  n_windows: 8
-  window_size: null
-  distribution: Multi-Bernoulli
+  ## Shape can be: [global, window-based, hybrid].
+  shape: window-based
+  ## If shape is [hybrid] define n_windows, otherwise leave it null.
+  n_windows: null
+  ## If shape is [global, window-based] define window_size, otherwise leave it null.
+  window_size: 5000
+  ## Distribution can be: [Gaussian, Multi-Bernoulli, Uniform].
+  distribution: Gaussian
+  ## If distribution is [Uniform] define codebook_size.
   codebook_size: 25
+  ## If model is conditioned define number of classes.
   num_classes: 7
+  ## Architecture of Encoder:
+  ## Layers must be numbered sequentially (0,1,2,...).
+  ## Layers must have the following parameters: [size, dropout, normalize, activation].
+  ## [size] defines the input shape tensor to the layer.
+  ## The actual size of the param matrix is [size_{i}] x [size_{i+1}].
+  ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 10005
+      size: 317408
       dropout: 0
       normalize: true
       activation: ReLU
     layer1: 
-      size: 1024
-      dropout: null
+      size: 512
+      dropout: 0.5
       normalize: true
       activation: ReLU
     layer2: 
-      size: 256
-      dropout: null
+      size: 128
+      dropout: 0
       normalize: true
-      activation: Tanh
+      activation: null
     layer3: 
       size: 64
+  ## Architecture of Decoder:
+  ## Layers must be numbered sequentially (0,1,2,...).
+  ## Layers must have the following parameters: [size, dropout, normalize, activation].
+  ## [size] defines the input shape tensor to the layer.
+  ## The actual size of the param matrix is [size_{i}] x [size_{i+1}].
+  ## The last layer has only one parameter: [size].
+  encoder:
   decoder: 
     layer0:
       size: 64
@@ -30,27 +50,56 @@ model:
       normalize: true
       activation: ReLU
     layer1:
-      size: 256
-      dropout: 0
+      size: 128
+      dropout: 0.5
       normalize: true
       activation: ReLU
     layer2:
-      size: 1024
+      size: 512
       dropout: 0
       normalize: true
-      activation: ReLU
+      activation: Sigmoid
     layer3:
-      size: 10005
+      size: 317408
 
+## Hyperparameters for training.
 hyperparams:
-  epochs: 3000
+  epochs: 2000
   batch_size: 128
   lr: 0.0001
   beta: 1
   weight_decay: 0
+  ## Scheduler can be: [null, plateau, step, multistep, exponential].
   scheduler: 
     method: plateau
     factor: 0.1
     patience: 5
     threshold: 0.0001
     mode: rel
+  ## TR simulation can be: [offline, online].
+  ## [offline] loads a dataset from disk.
+  ## [online] performs simulation on-the-fly.
+  training:
+    simulation: offline
+  ## VD simulation can be: [offline].
+  ## [offline] loads a dataset from disk.
+  validation:
+    simulation: offline
+    ## Scheduler sets the rate on which validation is done. E.g.:
+    ## 1: validation is done at the end of each epoch.
+    ## 100: validation is done each 100 epochs.
+    scheduler: 20
+  ## TS simulation can be: [offline].
+  ## [offline] loads a dataset from disk.
+  testing:
+    simulation: offline
+    ## Scheduler sets the rate on which testing is done. E.g.:
+    ## 1: testing is done at the end of each epoch.
+    ## 100: testing is done each 100 epochs.
+    scheduler: 150
+  ## Checkpoint params.
+  checkpointing:
+    ## Scheduler sets the rate on which checkpointing is done. E.g.:
+    ## 1: checkpointing is done at the end of each epoch.
+    ## 100: checkpointing is done each 100 epochs.
+      scheduler: 10

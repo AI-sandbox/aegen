@@ -165,24 +165,13 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 })
 
         log.info(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
-
-        if model['imputation']: 
-            vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss, vd_imputation_L1_loss = validate(model, vd_loader, epoch, stats['verbose'], monitor=monitor)
-        else:
-            vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss = validate(model, vd_loader, epoch, stats['verbose'], monitor=monitor)
-
-        if (ts_loader is not None) and (epoch % 150 == 0): #and (epoch != 0):
-            log.info('Testing...')
-            conditional = (model['architecture'] == 'C-VAE')
-            test(
-                model=model, 
-                ts_loader=ts_loader, 
-                epoch=epoch, 
-                metadata=metadata, 
-                only=only, 
-                conditional=conditional, 
-                monitor=monitor
-            )
+        
+        ## Validate according validation scheduler.
+        if (epoch % hyperparams['validation']['scheduler'] == 0):
+            if model['imputation']: 
+                vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss, vd_imputation_L1_loss = validate(model, vd_loader, epoch, stats['verbose'], monitor=monitor)
+            else:
+                vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss = validate(model, vd_loader, epoch, stats['verbose'], monitor=monitor)
             
         if bool(vd_vae_loss[-1] < best_loss):
             saver(
@@ -234,7 +223,23 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                     'vd_imputation_L1_losses': vd_imputation_L1_loss if model['imputation'] else None,
                 }
             )
-        elif epoch % 10 == 0:
+            
+        ## Test according testing scheduler.
+        if (ts_loader is not None) and (epoch % hyperparams['testing']['scheduler'] == 0): #and (epoch != 0):
+            log.info('Testing...')
+            conditional = (model['architecture'] == 'C-VAE')
+            test(
+                model=model, 
+                ts_loader=ts_loader, 
+                epoch=epoch, 
+                metadata=metadata, 
+                only=only, 
+                conditional=conditional, 
+                monitor=monitor
+            )
+            
+        ## Save checkpoint according checkpointing scheduler.
+        if epoch % hyperparams['checkpointing']['scheduler'] == 0:
             saver(
                 obj='stats',
                 num=num, 

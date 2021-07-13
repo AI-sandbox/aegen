@@ -562,7 +562,7 @@ class AEgen(nn.Module):
         )
     
     ## Variational Auto-encoder: Gaussian latent space
-    def reparametrize(self, mu, logvar):
+    def reparametrize(self, mu, logvar, sample_mode=False):
         if self.shape == 'window-based':
             if self.training or sample_mode:
                 z = []
