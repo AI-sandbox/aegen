@@ -87,6 +87,10 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 latent_mu, latent_logvar = model['body'].encoder(snps_array, labels)
                 z = model['body'].reparametrize(latent_mu, latent_logvar)
                 snps_reconstruction = model['body'].decoder(z, labels)
+            
+            if model['shape'] == 'window-based':
+                latent_mu = torch.cat(latent_mu, axis=-1)
+                latent_logvar = torch.cat(latent_logvar, axis=-1)
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
             
@@ -289,6 +293,9 @@ def validate(model, vd_loader, epoch, verbose, monitor=None):
                 z = model['body'].reparametrize(latent_mu, latent_logvar)
                 snps_reconstruction = model['body'].decoder(z, labels)
 
+            if model['shape'] == 'window-based':
+                latent_mu = torch.cat(latent_mu, axis=-1)
+                latent_logvar = torch.cat(latent_logvar, axis=-1)
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
             
@@ -395,7 +402,10 @@ if __name__ == '__main__':
     ksize=int(model_params['encoder']['layer0']['size'] / 1000)
     
     def summary_net(exp, species, chr, params):
-        shape = params['shape'].capitalize()
+        if params['num_classes'] is not None:
+            shape = 'C-'+params['shape']
+        else:
+            shape = params['shape'].capitalize()
         layer_sizes = [str(params['encoder'][layer]['size']) for layer in params['encoder'].keys()]
         name = f'[{exp}] {species.capitalize()} chr{chr}: {shape}({",".join(layer_sizes)})'
         return name
@@ -435,16 +445,22 @@ if __name__ == '__main__':
         ksize=ksize,
         only=args.only,
         conditional=args.conditional
-    ) if bool(args.evolution) else None
+    ) if bool(args.evolution) else None, None
     log.info('Data loaded ++')
     log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
     log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
     if bool(args.evolution): log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
-    if (tr_metadata['n_populations'] != vd_metadata['n_populations']) or (tr_metadata['n_populations'] != ts_metadata['n_populations']) or (vd_metadata['n_populations'] != ts_metadata['n_populations']):
-        log.info(f'[WARNING] Missing populations:')
-        log.info(f"\tTR SET has {tr_metadata['n_populations']} populations.")
-        log.info(f"\tVD SET has {vd_metadata['n_populations']} populations.")
-        log.info(f"\tTS SET has {ts_metadata['n_populations']} populations.")
+    if ts_metadata is not None:
+        if (tr_metadata['n_populations'] != vd_metadata['n_populations']) or (tr_metadata['n_populations'] != ts_metadata['n_populations']) or (vd_metadata['n_populations'] != ts_metadata['n_populations']):
+            log.info(f'[WARNING] Missing populations:')
+            log.info(f"\tTR SET has {tr_metadata['n_populations']} populations.")
+            log.info(f"\tVD SET has {vd_metadata['n_populations']} populations.")
+            log.info(f"\tTS SET has {ts_metadata['n_populations']} populations.")
+    else:
+        if (tr_metadata['n_populations'] != vd_metadata['n_populations']):
+            log.info(f'[WARNING] Missing populations:')
+            log.info(f"\tTR SET has {tr_metadata['n_populations']} populations.")
+            log.info(f"\tVD SET has {vd_metadata['n_populations']} populations.")
     log.info(f'Data ready ++')
     #======================== Prepare model ========================#
     model = AEgen(
@@ -512,6 +528,7 @@ if __name__ == '__main__':
     train(
         model={
             'architecture': model_params['shape'] + (' AE' if not args.conditional else ' C-AE'),
+            'shape':model_params['shape'],
             'distribution': model_params['distribution'],
             'body': model, 
             'parallel': model_parallel,

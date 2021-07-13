@@ -70,7 +70,7 @@ class Encoder(nn.Module):
         if self.shape == 'global':
             modules = []
 
-            for i in range(depth - 1 if self.latent_distribution == 'Gaussian' else depth):
+            for i in range(depth):
                 modules.append(FullyConnected(
                     ## Only can condition input (layer0).
                     input = (
@@ -106,9 +106,11 @@ class Encoder(nn.Module):
                     ## If first layer0, we split the input size.
                     ## Otherwise, we use the size defined in params.
                     if i == 0:
-                        if w != self.n_windows - 1:
-                            wsize = self.window_size
-                        else: wsize = self.window_size + (params['layer0']['size'] % self.window_size)
+                        wsize = self.window_size
+                        if num_classes is not None:
+                            wsize += num_classes 
+                        if w == self.n_windows - 1:
+                            wsize += (params['layer0']['size'] % self.window_size)
                     else: wsize = params[f'layer{i}']['size']
                     if self.latent_distribution == 'Gaussian':
                         modules[f'layer{i}_win{w}_mu'] = FullyConnected(
@@ -156,9 +158,11 @@ class Encoder(nn.Module):
                 ## Otherwise, we use the size defined in params.
                 for w in range(nw):
                     if i == 0:
-                        if w != self.n_windows - 1:
-                            wsize = self.window_size
-                        else: wsize = self.window_size + (params['layer0']['size'] % self.window_size)
+                        wsize = self.window_size
+                        if num_classes is not None:
+                            wsize += num_classes
+                        if w == self.n_windows - 1:
+                            wsize += (params['layer0']['size'] % self.window_size)
                     else: wsize = params[f'layer{i}']['size']
                     
                     if (self.latent_distribution == 'Gaussian') and (i == depth - 1) and (nw == 2): 
@@ -224,6 +228,9 @@ class Encoder(nn.Module):
                         x_windowed = x[..., w * self.window_size:]
                     else:
                         x_windowed = x[..., w * self.window_size:(w + 1) * self.window_size]
+                    ## Append class if needed
+                    if c is not None:
+                        x_windowed = torch.cat([x_windowed, c], -1)
                     ## Process each window with the corresponding funnel.
                     os_mu.append(self.funnel_mu[w](x_windowed))
                     os_logvar.append(self.funnel_logvar[w](x_windowed))
@@ -236,6 +243,9 @@ class Encoder(nn.Module):
                         x_windowed = x[..., w * self.window_size:]
                     else:
                         x_windowed = x[..., w * self.window_size:(w + 1) * self.window_size]
+                    ## Append class if needed
+                    if c is not None:
+                        x_windowed = torch.cat([x_windowed, c], -1)
                     ## Process each window with the corresponding funnel.
                     os.append(self.funnel[w](x_windowed))
                 ## Concat all outputs into a single o vector.
@@ -254,6 +264,10 @@ class Encoder(nn.Module):
                         else: 
                             w1 = x[..., w_id * self.window_size:(w_id + 1) * self.window_size]
                             w2 = x[..., (w_id + 1) * self.window_size:(w_id + 2) * self.window_size]
+                        ## Append class if needed
+                        if c is not None:
+                            w1 = torch.cat([w1, c], -1)
+                            w2 = torch.cat([w2, c], -1)
                     else: ## Recompute window sizes (defined in params)
                         wsize = self.params[f'layer{i}']['size']
                         w1 = x[..., w_id * wsize:(w_id + 1) * wsize]
@@ -384,13 +398,18 @@ class Decoder(nn.Module):
                 for w in range(self.n_windows):
                     ## If last layerD, we split the output size.
                     ## Otherwise, we use the size defined in params.
+                    zsize = params[f'layer{i}']['size']
+                    if (i == 0) and (num_classes is not None):
+                        zsize += num_classes
                     if i == depth - 1:
-                        if w != self.n_windows - 1:
-                            wsize = self.window_size
-                        else: wsize = self.window_size + (params[f'layer{depth}']['size'] % self.window_size)
+                        wsize = self.window_size
+                        if num_classes is not None:
+                            wsize += num_classes
+                        if w == self.n_windows - 1:
+                            wsize += (params[f'layer{depth}']['size'] % self.window_size)
                     else: wsize = params[f'layer{i + 1}']['size']
                     modules[f'layer{i}_win{w}'] = FullyConnected(
-                        input      = params[f'layer{i}']['size'],
+                        input      = zsize,
                         output     = wsize,
                         dropout    = params[f'layer{i}']['dropout'],
                         normalize  = params[f'layer{i}']['normalize'],
@@ -412,6 +431,9 @@ class Decoder(nn.Module):
                 ## If last layerD, we split the input size.
                 ## Otherwise, we use the size defined in params.
                 for w in range(nw):
+                    zsize = params[f'layer{i}']['size']
+                    if (i == 0) and (num_classes is not None):
+                        zsize += num_classes
                     if i == depth - 1:
                         if w != self.n_windows - 1:
                             wsize = self.window_size
@@ -419,7 +441,7 @@ class Decoder(nn.Module):
                     else: wsize = params[f'layer{i + 1}']['size']
                     aux.append(
                         FullyConnected(
-                            input      = params[f'layer{i}']['size'],
+                            input      = zsize,
                             output     = wsize,
                             dropout    = params[f'layer{i}']['dropout'],
                             normalize  = params[f'layer{i}']['normalize'],
@@ -437,7 +459,10 @@ class Decoder(nn.Module):
         elif self.shape == 'window-based':
             os = [] ## Stores the outputs of each window.
             for w in range(self.n_windows):
-                os.append(self.funnel[w](z[..., w * self.split_size: (w + 1) * self.split_size]))
+                z_windowed = z[..., w * self.split_size: (w + 1) * self.split_size]
+                if c is not None:
+                    z_windowed = torch.cat([z_windowed, c], -1)
+                os.append(self.funnel[w](z_windowed))
             ## Concat all outputs into a single o vector.
             o = torch.cat(os, axis=-1)
             return o
@@ -452,6 +477,8 @@ class Decoder(nn.Module):
                     # print(f'Current nodes: {w_id} and {w_id + 1}')
                     ## Recompute sizes on each layer given params
                     if i == 0: ## Forward the bottleneck completely
+                        if c is not None:
+                             z = torch.cat([z, c], -1)
                         w1 = w2 = z
                     else:
                         wsize = self.params[f'layer{i}']['size']
@@ -535,7 +562,7 @@ class AEgen(nn.Module):
         )
     
     ## Variational Auto-encoder: Gaussian latent space
-    def reparametrize(self, mu, logvar, sample_mode=False):
+    def reparametrize(self, mu, logvar):
         if self.shape == 'window-based':
             if self.training or sample_mode:
                 z = []
