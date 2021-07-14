@@ -33,7 +33,7 @@ if __name__ == '__main__':
         else:
             shape = model_params['shape'].capitalize()
         layer_sizes = [str(model_params['encoder'][layer]['size']) for layer in model_params['encoder'].keys()]
-        hyper = 'optimizer {hyperparams["optimizer"]["algorithm"]} with lr={hyperparams["optimizer"]["lr"]} and decay={hyperparams["optimizer"]["weight_decay"]}'
+        hyper = f'optimizer {hyperparams["optimizer"]["algorithm"]} with lr={hyperparams["optimizer"]["lr"]} and decay={hyperparams["optimizer"]["weight_decay"]}'
         name = f'[{exp}] {species.capitalize()} chr{chr}: {shape}({",".join(layer_sizes)}), {hyper}'
         return name
     
@@ -42,48 +42,72 @@ if __name__ == '__main__':
     #======================== Prepare data ========================#
     system_info()
     IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{args.species}/chr{args.chr}/prepared')
-    log.info('Loading data...')
-    log.info('Loading TR data...')
-    tr_loader, tr_metadata = loader(
-        ipath=IPATH,
-        batch_size=hyperparams['batch_size'], 
-        split_set='train',
-        ksize=ksize,
-        only=args.only,
-        conditional=args.conditional,
-    )
-    log.info(f'TR data loaded.')
-    system_info()
-    log.info('Loading VD data...')
-    vd_loader, vd_metadata = loader(
-        ipath=IPATH,
-        batch_size=hyperparams['batch_size'], 
-        split_set='valid',
-        ksize=ksize,
-        only=args.only,
-        conditional=args.conditional
-    )
-    log.info(f'VD data loaded.')
-    system_info()
-    ts_loader, ts_metadata = loader(
-        ipath=IPATH,
-        batch_size=hyperparams['batch_size'], 
-        split_set='test',
-        ksize=ksize,
-        only=args.only,
-        conditional=args.conditional
-    ) if bool(args.evolution) else None, None
+    
+    ## TR data loader.
+    if hyperparams['training']['simulation'] == 'offline':
+        log.info('-- USING OFFLINE SIMULATION FOR TR DATA --')
+        log.info('Loading data...')
+        log.info('Loading TR data...')
+        tr_loader, tr_metadata = loader(
+            ipath=IPATH,
+            batch_size=hyperparams['batch_size'], 
+            split_set='train',
+            ksize=ksize,
+            only=args.only,
+            conditional=args.conditional,
+        )
+        log.info(f'TR data loaded.')
+        log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
+        system_info()
+    else: 
+        log.info('-- USING ONLINE SIMULATION FOR TR DATA --')
+        tr_loader, tr_metadata = None, None
+    
+    ## VD data loader.
+    if hyperparams['validation']['simulation'] == 'offline':
+        log.info('-- USING OFFLINE SIMULATION FOR VD DATA --')
+        log.info('Loading VD data...')
+        vd_loader, vd_metadata = loader(
+            ipath=IPATH,
+            batch_size=hyperparams['batch_size'], 
+            split_set='valid',
+            ksize=ksize,
+            only=args.only,
+            conditional=args.conditional
+        )
+        log.info(f'VD data loaded.')
+        log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
+        system_info()
+    else: raise Exception('VD data simulation can only be offline.')
+    
+    ## TS data loader.
+    if bool(args.evolution):
+        if hyperparams['testing']['simulation'] == 'offline':
+            log.info('-- USING OFFLINE SIMULATION FOR TS DATA --')
+            log.info('Loading TS data...')
+            ts_loader, ts_metadata = loader(
+                ipath=IPATH,
+                batch_size=hyperparams['batch_size'], 
+                split_set='test',
+                ksize=ksize,
+                only=args.only,
+                conditional=args.conditional
+            )
+            log.info(f'TS data loaded.')
+            log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
+        else: raise Exception('TS data simulation can only be offline.')
+    else: ts_loader, ts_metadata = None, None
+        
     log.info('Data loaded ++')
-    log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
-    log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
-    if bool(args.evolution): log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
-    if ts_metadata is not None:
+    
+    ## Checking coherence between datasets w.r.t. to the # of populations.
+    if (ts_metadata is not None) and (tr_metadata is not None) and (vd_metadata is not None):
         if (tr_metadata['n_populations'] != vd_metadata['n_populations']) or (tr_metadata['n_populations'] != ts_metadata['n_populations']) or (vd_metadata['n_populations'] != ts_metadata['n_populations']):
             log.info(f'[WARNING] Missing populations:')
             log.info(f"\tTR SET has {tr_metadata['n_populations']} populations.")
             log.info(f"\tVD SET has {vd_metadata['n_populations']} populations.")
             log.info(f"\tTS SET has {ts_metadata['n_populations']} populations.")
-    else:
+    elif (ts_metadata is None) and (tr_metadata is not None) and (vd_metadata is not None):
         if (tr_metadata['n_populations'] != vd_metadata['n_populations']):
             log.info(f'[WARNING] Missing populations:')
             log.info(f"\tTR SET has {tr_metadata['n_populations']} populations.")
