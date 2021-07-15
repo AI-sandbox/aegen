@@ -185,7 +185,7 @@ class OnlineSimulator:
                 batch_snps = self.snps[rand_idx,:]
                 batch_labels = self.labels[rand_idx,:]
                 
-                return self._simulate_from_pool(
+                batch_snps, batch_labels = self._simulate_from_pool(
                     batch_snps=batch_snps, 
                     batch_labels=batch_labels, 
                     batch_size=self.batch_size, 
@@ -215,7 +215,7 @@ class OnlineSimulator:
                 batch_snps  = batch_snps[permute_idx,:]
                 batch_labels = batch_labels[permute_idx,:]
                 
-                return self._simulate_from_pool(
+                batch_snps, batch_labels = self._simulate_from_pool(
                     batch_snps=batch_snps, 
                     batch_labels=batch_labels, 
                     batch_size=self.batch_size, 
@@ -249,11 +249,12 @@ class OnlineSimulator:
                     
                     batch_snps = torch.cat([batch_snps, anc_batch_snps], axis=0)
                     batch_labels = torch.cat([batch_labels, anc_batch_labels], axis=0)
-                return batch_snps, batch_labels
             
             ##
             elif self.single_ancestry and (not self.balanced):
                 raise Exception('Not implemented.')
+            
+            return batch_snps.float(), batch_labels.float()
     
     
  

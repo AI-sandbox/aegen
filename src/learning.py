@@ -71,10 +71,10 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         datalen = hyperparams['training']['n_batches']
         batch_counter = [None] * datalen
         log.info('Initializating online simulator...')
-        assert(model_params['num_classes'] == vd_metadata['n_populations'])
+        assert(model['num_classes'] == metadata['vd_metadata']['n_populations'])
         online_simulator = OnlineSimulator(
             batch_size = hyperparams['batch_size'],
-            n_populations = model_params['num_classes'],
+            n_populations = model['num_classes'],
             mode = hyperparams['training']['mode'],
             balanced = hyperparams['training']['balanced'],
             device = hyperparams['training']['device']
@@ -98,9 +98,12 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             if offline:
                 snps_array = batch[0].to(device)#.unsqueeze(1)
                 labels = batch[1].to(device) if model['conditional'] else None
+                print(snps_array.shape)
             else: 
                 snps_array, labels = online_simulator.simulate()
                 snps_array, labels = snps_array.to(device), labels.to(device)
+                labels = labels if model['conditional'] else None
+                print(snps_array.shape)
 
             if model['imputation']:
                 snps_reconstruction, latent_mu, latent_logvar, mask = model['body'](snps_array, labels)

@@ -68,9 +68,9 @@ hyperparams:
   beta: 1
   ## Optimizer algorithm can be: [Adam, AdamW, SparseAdam].
   optimizer:
-       algorithm: SparseAdam
-       lr: 0.001
-       weight_decay: 0
+       algorithm: Adam
+       lr: 0.0001
+       weight_decay: 0.01
   ## Scheduler can be: [null, plateau, step, multistep, exponential].
   scheduler: 
        method: plateau

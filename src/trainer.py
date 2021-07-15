@@ -1,3 +1,6 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 import os
 import gc
 import time
@@ -149,11 +152,12 @@ if __name__ == '__main__':
             lr=hyperparams['optimizer']['lr'], 
             weight_decay=hyperparams['optimizer']['weight_decay']
         )
+        # RuntimeError: SparseAdam does not support dense gradients, please consider Adam instead
         elif hyperparams['optimizer']['algorithm'] == 'SparseAdam':
             optimizer = torch.optim.SparseAdam(
             params=model.parameters(), 
-            lr=hyperparams['optimizer']['lr'], 
-            weight_decay=hyperparams['optimizer']['weight_decay']
+            lr=hyperparams['optimizer']['lr'], # HAS NO WEIGHT DECAY!
+            #weight_decay=hyperparams['optimizer']['weight_decay']
         )
         else: raise Exception('Unknown optimization algorithm')
     else: raise Exception('Missing optimizer')
@@ -201,6 +205,7 @@ if __name__ == '__main__':
             'parallel': model_parallel,
             'num_params': num_params,
             'conditional': args.conditional,
+            'num_classes': model_params['num_classes'],
             'imputation': args.imputation,
             'gpu': torch.cuda.get_device_name(),
         }, 
