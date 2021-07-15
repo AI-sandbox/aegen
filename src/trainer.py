@@ -200,6 +200,7 @@ if __name__ == '__main__':
             'body': model, 
             'parallel': model_parallel,
             'num_params': num_params,
+            'conditional': args.conditional,
             'imputation': args.imputation,
             'gpu': torch.cuda.get_device_name(),
         }, 

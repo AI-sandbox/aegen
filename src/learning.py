@@ -15,6 +15,7 @@ from models.losses import VAEloss, L1loss
 from models.initializers import init_xavier
 from utils.decorators import timer 
 from utils.loggers import progress, latentPCA, saver, system_info
+from utils.simulators import OnlineSimulator
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -22,10 +23,6 @@ log = logging.getLogger(__name__)
 @timer
 def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader, device='cpu', summary=None, num=0, only=None, monitor=None, metadata=None):
 
-    #======================== Set data ========================#
-    #log.info('Setting data ...')
-    #tr_loader, vd_loader, ts_loader = data
-    #log.info('Data set.')
     #======================== Set model ========================#
     log.info('Setting model ...')
     model['body'].apply(init_xavier)
@@ -53,28 +50,56 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
     log.info('Preparing stats ...')
     best_loss = np.inf
     best_epoch = 0
-    datalen = len(tr_loader)
 
+    ## TODO: a better way to store metrics.
     total_vae_loss, total_rec_loss, total_KL_div  = [], [], []
     total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
     total_compression_ratio = []
     if model['imputation']: total_imputation_L1_loss = []
     log.info('Stats prepared.')
+    #======================== Define simulation type ========================#
+    ## If training simulation is offline just traverse the TR dataloader.
+    if hyperparams['training']['simulation'] == 'offline':
+        offline = True
+        datalen = len(tr_loader)
+    ## Elif training simulation is online, instantiate an OnlineSimulation
+    ## constructor with the simulation parameters.
+    ## OnlineSimulation will simulate a data batch when .simulate() is 
+    ## called upon.
+    elif hyperparams['training']['simulation'] == 'online':
+        offline = False
+        datalen = hyperparams['training']['n_batches']
+        batch_counter = [None] * datalen
+        log.info('Initializating online simulator...')
+        assert(model_params['num_classes'] == vd_metadata['n_populations'])
+        online_simulator = OnlineSimulator(
+            batch_size = hyperparams['batch_size'],
+            n_populations = model_params['num_classes'],
+            mode = hyperparams['training']['mode'],
+            device = hyperparams['training']['device']
+        )
+        log.info('Online simulation initialized.')
+    else: raise Exception('Simulation can be either [online, offline].')
     #======================== Start training loop ========================#
-    log.info('Training loop starting now ...')
+    log.info('Training loop starting now ...')                              
     for epoch in range(hyperparams['epochs']):
         
         ini = time.time()
 
+        ## TODO: a better way to store metrics.
         epoch_vae_loss, epoch_rec_loss, epoch_KL_div  = [], [], []
         epoch_L1_loss, epoch_zeros_loss, epoch_ones_loss = [], [], []
         epoch_compression_ratio = []
         if model['imputation']: epoch_imputation_L1_loss = []
         
-        for i, batch in enumerate(tr_loader):
+        for i, batch in enumerate(tr_loader if offline else batch_counter):
 
-            snps_array = batch[0].to(device)#.unsqueeze(1)
-            labels = batch[1].to(device) if model['architecture'] == 'C-VAE' else None
+            if offline:
+                snps_array = batch[0].to(device)#.unsqueeze(1)
+                labels = batch[1].to(device) if model['conditional'] else None
+            else: 
+                snps_array, labels = online_simulator.simulate()
+                snps_array, labels = snps_array.to(device), labels.to(device)
 
             if model['imputation']:
                 snps_reconstruction, latent_mu, latent_logvar, mask = model['body'](snps_array, labels)
@@ -87,9 +112,12 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             if model['shape'] == 'window-based':
                 latent_mu = torch.cat(latent_mu, axis=-1)
                 latent_logvar = torch.cat(latent_logvar, axis=-1)
+            
+            ## Compute losses and metrics.
             loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
             L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
             
+            ## Clear memory and caches.
             del snps_array
             del labels
             del latent_mu
@@ -99,11 +127,11 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             gc.collect()
             torch.cuda.empty_cache()
 
-            # Backpropagation
+            # Backpropagation.
             optimizer['body'].zero_grad()
             loss.backward()
             
-            # One step of the optimizer (using the gradients from backpropagation)
+            # One step of the optimizer (using the gradients from backpropagation).
             optimizer['body'].step()
 
             epoch_vae_loss.append(loss.item())

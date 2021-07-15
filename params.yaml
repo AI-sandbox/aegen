@@ -81,8 +81,14 @@ hyperparams:
   ## TR simulation can be: [offline, online].
   ## [offline] loads a dataset from disk.
   ## [online] performs simulation on-the-fly.
+  ## [n_batches] determines the length of an epoch in terms of batches in [online] simulation.
+  ## In [offline] simulation [n_batches, device, mode] are neglected.
+  ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
        simulation: offline
+       n_batches: 100
+       device: cpu
+       mode: uniform
   ## VD simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   validation:
