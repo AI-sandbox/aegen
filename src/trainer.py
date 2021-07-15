@@ -1,7 +1,6 @@
 import os
 import gc
 import time
-import json
 import yaml
 import torch
 import logging
@@ -34,7 +33,8 @@ if __name__ == '__main__':
             shape = model_params['shape'].capitalize()
         layer_sizes = [str(model_params['encoder'][layer]['size']) for layer in model_params['encoder'].keys()]
         hyper = f'optimizer {hyperparams["optimizer"]["algorithm"]} with lr={hyperparams["optimizer"]["lr"]} and decay={hyperparams["optimizer"]["weight_decay"]}'
-        name = f'[{exp}] {species.capitalize()} chr{chr}: {shape}({",".join(layer_sizes)}), {hyper}'
+        data = f'using {hyperparams["training"]["simulation"]} simulation'
+        name = f'[{exp}] {species.capitalize()} chr{chr}: {shape}({",".join(layer_sizes)}), {hyper}, '
         return name
     
     summary = summary_net(args.num, args.species, args.chr, model_params, hyperparams, args.conditional)

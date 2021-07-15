@@ -76,6 +76,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             batch_size = hyperparams['batch_size'],
             n_populations = model_params['num_classes'],
             mode = hyperparams['training']['mode'],
+            balanced = hyperparams['training']['balanced'],
             device = hyperparams['training']['device']
         )
         log.info('Online simulation initialized.')

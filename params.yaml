@@ -85,10 +85,11 @@ hyperparams:
   ## In [offline] simulation [n_batches, device, mode] are neglected.
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
-       simulation: offline
+       simulation: online
        n_batches: 100
        device: cpu
        mode: uniform
+       balanced: true
   ## VD simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   validation:
