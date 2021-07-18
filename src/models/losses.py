@@ -3,14 +3,16 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def VAEloss(x, o, mu, logvar, beta=1):
+def aeloss(x, o, mu, logvar, beta=1, backward=False):
 
     loss = F.binary_cross_entropy(o, x, reduction='sum')
     KL_divergence = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
  
-    return loss +  beta * KL_divergence, loss, KL_divergence
+    if backward:
+        return loss
+    return (loss +  beta * KL_divergence).item(), loss.item(), KL_divergence.item()
 
-def L1loss(x, o, partial=False, proportion=False):
+def L1loss(x, o, partial=True, proportion=True):
     loss = F.l1_loss((o > 0.5).float(), x, reduction='sum')
     
     if partial:
@@ -28,8 +30,8 @@ def L1loss(x, o, partial=False, proportion=False):
             acc_zeros = loss_zeros / zeros * 100
             acc_ones = loss_ones / ones * 100
             
-            return acc_total, acc_zeros, acc_ones, compression_ratio
+            return acc_total.item(), acc_zeros, acc_ones, compression_ratio
         
-        return loss, loss_zeros, loss_ones, compression_ratio
+        return loss.item(), loss_zeros, loss_ones, compression_ratio
     
-    return loss if not proportion else loss / (x.shape[0] * x.shape[1]) * 100
+    return loss.item() if not proportion else loss.item() / (x.shape[0] * x.shape[1]) * 100

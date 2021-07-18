@@ -11,10 +11,15 @@ import numpy as np
 import torch.nn as nn
 
 from parser import create_parser
+
 from models.VAEgen import AEgen
+from models.losses import aeloss, L1loss
+from models.metrics import metacompressor_metric
+
 from utils.loader import loader 
 from utils.loggers import system_info
 from learning import train, validate, test
+
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -54,7 +59,7 @@ if __name__ == '__main__':
         tr_loader, tr_metadata = loader(
             ipath=IPATH,
             batch_size=hyperparams['batch_size'], 
-            split_set='train',
+            split_set='valid',
             ksize=ksize,
             only=args.only,
             conditional=args.conditional,
@@ -235,5 +240,26 @@ if __name__ == '__main__':
         num=args.num,
         only=args.only,
         monitor='wandb',
+        metrics={
+            ## If the key is a function:
+            ## Then define the inputs and the expected outputs
+            ## of the function to store the metrics.
+            aeloss: {
+                'inputs' : ['input', 'reconstruction', 'mu', 'logvar'],
+                'outputs': ['ae_loss', 'reconstruction_loss', 'KL_divergence'],
+            },
+            L1loss: {
+                'inputs' : ['input', 'reconstruction'],
+                'outputs': ['L1_loss', 'ones_reconstruction_loss', 'zeros_reconstruction_loss'],
+            },
+            ## If the key is a metric name:
+            ## Then define the inputs, the function,
+            ## and the hyperparameters for the function.
+            'compression_ratio' : {
+                'inputs' : ['input', 'mu', 'reconstruction'],
+                'function': metacompressor_metric,
+                'params' : ['lz4', 'zlib', 'zstd']
+            },
+        }
     )
     #======================== End training ========================#

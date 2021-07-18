@@ -11,8 +11,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-from models.losses import VAEloss, L1loss
+from models.losses import aeloss, L1loss
+from models.metrics import create_metrics_dict
 from models.initializers import init_xavier
+
 from utils.decorators import timer 
 from utils.loggers import progress, latentPCA, saver, system_info
 from utils.simulators import OnlineSimulator
@@ -21,12 +23,13 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 @timer
-def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader, device='cpu', summary=None, num=0, only=None, monitor=None, metadata=None):
+def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader, device='cpu', summary=None, num=0, only=None, monitor=None, metadata=None, metrics=None):
 
     #======================== Set model ========================#
+    if metrics is None: log.info('[WARNING] No metrics defined.')   
     log.info('Setting model ...')
     model['body'].apply(init_xavier)
-    if monitor == 'wandb':
+    if (monitor == 'wandb') and (metrics is not None):
         log.info('Initializing wandb ...')
         system_info()
         log.info('Setting environ variable ...')
@@ -44,18 +47,17 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
     log.info('Setting training mode ...')
     # Set to training mode
     model['body'].train()
-    log.info(model)
+    # log.info(model)
     log.info('Model set.')
     #======================== Prepare stats ========================#
     log.info('Preparing stats ...')
     best_loss = np.inf
     best_epoch = 0
 
-    ## TODO: a better way to store metrics.
-    total_vae_loss, total_rec_loss, total_KL_div  = [], [], []
-    total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
-    total_compression_ratio = []
-    if model['imputation']: total_imputation_L1_loss = []
+    ## Initialize metrics dict.
+    tr_metrics = create_metrics_dict(metrics, prefix='train')
+    vd_metrics = create_metrics_dict(metrics, prefix='valid')
+    
     log.info('Stats prepared.')
     #======================== Define simulation type ========================#
     ## If training simulation is offline just traverse the TR dataloader.
@@ -86,144 +88,128 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
     for epoch in range(hyperparams['epochs']):
         
         ini = time.time()
-
-        ## TODO: a better way to store metrics.
-        epoch_vae_loss, epoch_rec_loss, epoch_KL_div  = [], [], []
-        epoch_L1_loss, epoch_zeros_loss, epoch_ones_loss = [], [], []
-        epoch_compression_ratio = []
-        if model['imputation']: epoch_imputation_L1_loss = []
+        epoch_metrics = create_metrics_dict(metrics, prefix='aux')
         
         for i, batch in enumerate(tr_loader if offline else batch_counter):
 
             if offline:
                 snps_array = batch[0].to(device)#.unsqueeze(1)
                 labels = batch[1].to(device) if model['conditional'] else None
-                print(snps_array.shape)
             else: 
                 snps_array, labels = online_simulator.simulate()
                 snps_array, labels = snps_array.to(device), labels.to(device)
                 labels = labels if model['conditional'] else None
-                print(snps_array.shape)
-
-            if model['imputation']:
-                snps_reconstruction, latent_mu, latent_logvar, mask = model['body'](snps_array, labels)
-                imputation_L1_loss = F.l1_loss((snps_reconstruction[mask] > 0.5).float(), snps_array[mask], reduction='mean') * 100
-            else:
-                latent_mu, latent_logvar = model['body'].encoder(snps_array, labels)
-                z = model['body'].reparametrize(latent_mu, latent_logvar)
-                snps_reconstruction = model['body'].decoder(z, labels)
             
-            if model['shape'] == 'window-based':
-                latent_mu = torch.cat(latent_mu, axis=-1)
-                latent_logvar = torch.cat(latent_logvar, axis=-1)
+            ## Forward inputs through net.
+            if model['distribution'] == 'Gaussian':
+                mu, logvar = model['body'].encoder(snps_array, labels)
+                z = model['body'].reparametrize(mu, logvar)
+                if model['shape'] == 'window-based':
+                    mu = torch.cat(mu, axis=-1)
+                    logvar = torch.cat(logvar, axis=-1)
+            else: z = mu = model['body'].encoder(snps_array, labels)
+            snps_reconstruction = model['body'].decoder(z, labels)
+            input_mapper = {
+                'input' : snps_array,
+                'reconstruction' : snps_reconstruction,
+                'mu' : mu,
+            }
+            if model['distribution'] == 'Gaussian': input_mapper['logvar'] = logvar
             
             ## Compute losses and metrics.
-            loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
-            L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
+            for kmetric, meta in metrics.items():
+                if callable(kmetric):
+                    inputs = []
+                    for var in meta['inputs']:
+                        try: inputs.append(input_mapper[var]) 
+                        except KeyError: pass 
+                    for name, val in zip(meta['outputs'],kmetric(*inputs)):
+                        epoch_metrics[f'aux_{name}'].append(val)
+                else:
+                    for p in meta['params']:
+                        inputs = []
+                        for var in meta['inputs']:
+                            try: inputs.append(input_mapper[var]) 
+                            except KeyError: pass 
+                        inputs.append(p)
+                        epoch_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
+            # Backpropagation.
+            optimizer['body'].zero_grad()
+            aeloss(snps_array, snps_reconstruction, mu, logvar, backward=True).backward()
+            
+            # One step of the optimizer (using the gradients from backpropagation).
+            optimizer['body'].step()
             
             ## Clear memory and caches.
             del snps_array
             del labels
-            del latent_mu
-            del latent_logvar
+            del mu
+            del logvar
             del z
             del snps_reconstruction
             gc.collect()
             torch.cuda.empty_cache()
 
-            # Backpropagation.
-            optimizer['body'].zero_grad()
-            loss.backward()
-            
-            # One step of the optimizer (using the gradients from backpropagation).
-            optimizer['body'].step()
-
-            epoch_vae_loss.append(loss.item())
-            epoch_rec_loss.append(rec_loss.item())
-            epoch_KL_div.append(KL_div.item())
-
-            epoch_L1_loss.append(L1_loss.item())
-            epoch_zeros_loss.append(zeros_loss)
-            epoch_ones_loss.append(ones_loss)
-
-            epoch_compression_ratio.append(compression_ratio.item())
-            if model['imputation']: epoch_imputation_L1_loss.append(imputation_L1_loss.item())
-
             if stats['verbose']:
                 progress(
                     current=i+1, total=datalen, time=time.time()-ini,
-                    vae_loss=epoch_vae_loss, rec_loss=epoch_rec_loss, KL_div=epoch_KL_div,
-                    L1_loss=epoch_L1_loss, zeros_loss=epoch_zeros_loss, ones_loss=epoch_ones_loss,
-                    compression_ratio=epoch_compression_ratio, imputation_L1_loss=epoch_imputation_L1_loss if model['imputation'] else [0]
+                    vae_loss=epoch_metrics['aux_ae_loss'],
+                    rec_loss=epoch_metrics['aux_reconstruction_loss'],
+                    KL_div=epoch_metrics['aux_KL_divergence'],
+                    L1_loss=epoch_metrics['aux_L1_loss'],
+                    zeros_loss=epoch_metrics['aux_zeros_reconstruction_loss'],
+                    ones_loss=epoch_metrics['aux_ones_reconstruction_loss'],
                 )
-
-        total_vae_loss.append(np.mean(epoch_vae_loss[-stats['slide']:]))
-        total_rec_loss.append(np.mean(epoch_rec_loss[-stats['slide']:]))
-        total_KL_div.append(np.mean(epoch_KL_div[-stats['slide']:]))
-
-        total_L1_loss.append(np.mean(epoch_L1_loss[-stats['slide']:]))
-        total_zeros_loss.append(np.mean(epoch_zeros_loss[-stats['slide']:]))
-        total_ones_loss.append(np.mean(epoch_ones_loss[-stats['slide']:]))
-
-        total_compression_ratio.append(np.mean(epoch_compression_ratio[-stats['slide']:]))
-        if model['imputation']: total_imputation_L1_loss.append(np.mean(epoch_imputation_L1_loss[-stats['slide']:]))
-            
-        if optimizer['scheduler'] is not None: optimizer['scheduler'].step(np.mean(epoch_vae_loss[-stats['slide']:]))
+        
+        for kmetric, meta in metrics.items():
+            if callable(kmetric):
+                for name in meta['outputs']:
+                    val = np.mean(epoch_metrics[f'aux_{name}'][-stats['slide']:])
+                    tr_metrics[f'tr_{name}'].append(val)
+            else:
+                for p in meta['params']:
+                    val = np.mean(epoch_metrics[f'aux_{p}_{kmetric}'][-stats['slide']:])
+                    tr_metrics[f'tr_{p}_{kmetric}'].append(val)
+        
+        if optimizer['scheduler'] is not None: optimizer['scheduler'].step(np.mean(epoch_metrics['aux_ae_loss'][-stats['slide']:]))
 
         if monitor == 'wandb':
-            wandb.log({
-                'tr_VAE_loss': total_vae_loss[-1],
-                'tr_rec_loss': total_rec_loss[-1],
-                'tr_KL_div': total_KL_div[-1],
-            })
+            for kmetric,val in tr_metrics.items():
+                wandb.log({ kmetric: val[-1] })
 
-            wandb.log({
-                'tr_L1_loss': total_L1_loss[-1],
-                'tr_zeros_loss': total_zeros_loss[-1],
-                'tr_ones_loss': total_ones_loss[-1],
-            })
-
-            wandb.log({
-                'compression_ratio': total_compression_ratio[-1],
-            })
-
-            if model['imputation']:
-                wandb.log({
-                    'tr_imputation_L1_loss': total_imputation_L1_loss[-1],
-                })
-
-        log.info(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {total_vae_loss[-1]}")
+        log.info(f"Epoch [{epoch + 1} / {hyperparams['epochs']}] ({time.time()-ini}s) VAE error: {tr_metrics['tr_ae_loss'][-1]}")
         
         ## Validate according validation scheduler.
         if (epoch % hyperparams['validation']['scheduler'] == 0):
             
-            if model['imputation']: 
-                vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss, vd_imputation_L1_loss = validate(
-                    model, 
-                    vd_loader, 
-                    epoch, 
-                    stats['verbose'], 
-                    monitor=monitor, 
-                    device=device
-                )
-            else:
-                vd_vae_loss, vd_rec_loss, vd_KL_div, vd_L1_loss, vd_zeros_loss, vd_ones_loss = validate(
-                    model, 
-                    vd_loader, 
-                    epoch, 
-                    stats['verbose'], 
-                    monitor=monitor,
-                    device=device
-                )
+            aux_vd_metrics = validate(
+                model, 
+                vd_loader, 
+                epoch, 
+                stats['verbose'], 
+                monitor=monitor, 
+                device=device,
+                metrics=metrics
+            )
             
-        if bool(vd_vae_loss[-1] < best_loss):
+            for kmetric, meta in metrics.items():
+                if callable(kmetric):
+                    for name in meta['outputs']:
+                        val = aux_vd_metrics[f'aux_{name}']
+                        vd_metrics[f'vd_{name}'].append(val)
+                else:
+                    for p in meta['params']:
+                        val = aux_vd_metrics[f'aux_{name}']
+                        vd_metrics[f'vd_{p}_{kmetric}'].append(val)
+            del aux_vd_metrics
+            
+        if bool(vd_metrics['vd_ae_loss'][-1] < best_loss):
             saver(
                 obj='model', 
                 num=num, 
                 state={
                     'architecture': model['architecture'],
                     'imputation': model['imputation'],
-                    #'body': model['body'], 
                     'parallel': model['parallel'],
                     'num_params': model['num_params'],
                     'weights': model['body'].state_dict()
@@ -238,7 +224,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 }
             )
             best_epoch = epoch + 1
-            best_loss = vd_vae_loss[-1]
+            best_loss = vd_metrics['vd_ae_loss'][-1]
             saver(
                 obj='stats',
                 num=num, 
@@ -249,35 +235,22 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                     'best_epoch': best_epoch,
                     'best_loss': best_loss,
                     # Training stats:
-                    'tr_vae_losses': total_vae_loss,
-                    'tr_rec_losses': total_rec_loss,
-                    'tr_KL_div': total_KL_div,
-                    'tr_L1_losses': total_L1_loss,
-                    'tr_zeros_losses': total_zeros_loss,
-                    'tr_ones_losses': total_ones_loss,
-                    'tr_imputation_L1_losses': total_imputation_L1_loss if model['imputation'] else None,
+                    'tr_metrics': tr_metrics,
                     # Validation stats:
-                    'vd_vae_losses': vd_vae_loss, 
-                    'vd_rec_losses': vd_rec_loss, 
-                    'vd_KL_div': vd_KL_div, 
-                    'vd_L1_losses': vd_L1_loss, 
-                    'vd_zeros_losses': vd_zeros_loss, 
-                    'vd_ones_losses': vd_ones_loss,
-                    'vd_imputation_L1_losses': vd_imputation_L1_loss if model['imputation'] else None,
+                    'vd_metrics': vd_metrics
                 }
             )
             
         ## Test according testing scheduler.
         if (ts_loader is not None) and (epoch % hyperparams['testing']['scheduler'] == 0): #and (epoch != 0):
             log.info('Testing...')
-            conditional = (model['architecture'] == 'C-VAE')
             test(
                 model=model, 
                 ts_loader=ts_loader, 
                 epoch=epoch, 
                 metadata=metadata, 
                 only=only, 
-                conditional=conditional, 
+                conditional=model['conditional'], 
                 monitor=monitor,
                 device=device
             )
@@ -294,37 +267,23 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                     'best_epoch': best_epoch,
                     'best_loss': best_loss,
                     # Training stats:
-                    'tr_vae_losses': total_vae_loss,
-                    'tr_rec_losses': total_rec_loss,
-                    'tr_KL_div': total_KL_div,
-                    'tr_L1_losses': total_L1_loss,
-                    'tr_zeros_losses': total_zeros_loss,
-                    'tr_ones_losses': total_ones_loss,
-                    'tr_imputation_L1_losses': total_imputation_L1_loss if model['imputation'] else None,
+                    'tr_metrics': tr_metrics,
                     # Validation stats:
-                    'vd_vae_losses': vd_vae_loss, 
-                    'vd_rec_losses': vd_rec_loss, 
-                    'vd_KL_div': vd_KL_div, 
-                    'vd_L1_losses': vd_L1_loss, 
-                    'vd_zeros_losses': vd_zeros_loss, 
-                    'vd_ones_losses': vd_ones_loss,
-                    'vd_imputation_L1_losses': vd_imputation_L1_loss if model['imputation'] else None,
+                    'vd_metrics': vd_metrics
                 }
             )
     
     print(f'Training finished in {time.time() - ini}s.')
 
 @timer
-def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu'):
+def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metrics=None):
 
     # Set to evaluation mode
     model['body'].eval()
     loss = 0
 
-    total_vae_loss, total_rec_loss, total_KL_div  = [], [], []
-    total_L1_loss, total_zeros_loss, total_ones_loss = [], [], []
-    total_compression_ratio = []
-    if model['imputation']: total_imputation_L1_loss = []
+    ## Initialize metrics dict.
+    aux_vd_metrics = create_metrics_dict(metrics, prefix='aux')
     
     ini = time.time()
     with torch.no_grad():
@@ -332,74 +291,68 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu'):
         for i, batch in enumerate(vd_loader):
 
             snps_array = batch[0].to(device)
-            labels = batch[1].to(device) if model['architecture'] == 'C-VAE' else None
+            labels = batch[1].to(device) if model['conditional'] else None
 
-            if model['imputation']:
-                snps_reconstruction, latent_mu, latent_logvar, mask = model['body'](snps_array, labels)
-                imputation_L1_loss =  F.l1_loss((snps_reconstruction[mask] > 0.5).float(), snps_array[mask], reduction='mean') * 100
-            else:
-                latent_mu, latent_logvar = model['body'].encoder(snps_array, labels)
-                z = model['body'].reparametrize(latent_mu, latent_logvar)
-                snps_reconstruction = model['body'].decoder(z, labels)
-
-            if model['shape'] == 'window-based':
-                latent_mu = torch.cat(latent_mu, axis=-1)
-                latent_logvar = torch.cat(latent_logvar, axis=-1)
-            loss, rec_loss, KL_div = VAEloss(snps_array, snps_reconstruction, latent_mu, latent_logvar)
-            L1_loss, zeros_loss, ones_loss, compression_ratio = L1loss(snps_array, snps_reconstruction, partial=True, proportion=True)
+            ## Forward inputs through net.
+            if model['distribution'] == 'Gaussian':
+                mu, logvar = model['body'].encoder(snps_array, labels)
+                z = model['body'].reparametrize(mu, logvar)
+                if model['shape'] == 'window-based':
+                    mu = torch.cat(mu, axis=-1)
+                    logvar = torch.cat(logvar, axis=-1)
+            else: z = mu = model['body'].encoder(snps_array, labels)
+            snps_reconstruction = model['body'].decoder(z, labels)
+            input_mapper = {
+                'input' : snps_array,
+                'reconstruction' : snps_reconstruction,
+                'mu' : mu,
+            }
+            if model['distribution'] == 'Gaussian': input_mapper['logvar'] = logvar
+            
+            ## Compute losses and metrics.
+            for kmetric, meta in metrics.items():
+                if callable(kmetric):
+                    inputs = []
+                    for var in meta['inputs']:
+                        try: inputs.append(input_mapper[var]) 
+                        except KeyError: pass 
+                    for name, val in zip(meta['outputs'],kmetric(*inputs)):
+                        aux_vd_metrics[f'aux_{name}'].append(val)
+                else:
+                    for p in meta['params']:
+                        inputs = []
+                        for var in meta['inputs']:
+                            try: inputs.append(input_mapper[var]) 
+                            except KeyError: pass 
+                        inputs.append(p)
+                        aux_vd_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
             
             del snps_array
             del labels
-            del latent_mu
-            del latent_logvar
+            del mu
+            del logvar
             del z
             del snps_reconstruction
             gc.collect()
             torch.cuda.empty_cache()
-
-            total_vae_loss.append(loss.item())
-            total_rec_loss.append(rec_loss.item())
-            total_KL_div.append(KL_div.item())
-
-            total_L1_loss.append(L1_loss.item())
-            total_zeros_loss.append(zeros_loss)
-            total_ones_loss.append(ones_loss)
-
-            total_compression_ratio.append(compression_ratio.item())
-            if model['imputation']: total_imputation_L1_loss.append(imputation_L1_loss.item())
         
-        if monitor == 'wandb':
-            wandb.log({
-                'vd_VAE_loss': np.mean(total_vae_loss),
-                'vd_rec_loss': np.mean(total_rec_loss),
-                'vd_KL_div': np.mean(total_KL_div),
-            })
-
-            wandb.log({
-                'vd_L1_loss': np.mean(total_L1_loss),
-                'vd_zeros_loss': np.mean(total_zeros_loss),
-                'vd_ones_loss': np.mean(total_ones_loss),
-            })
-
-            wandb.log({
-                'vd_compression_ratio': np.mean(total_compression_ratio),
-            })
-
-            if model['imputation']: 
-                wandb.log({
-                    'vd_imputation_L1_loss': np.mean(total_imputation_L1_loss),
-                })
-
+        for kmetric,val in aux_vd_metrics.items():
+            aux_vd_metrics[kmetric] = np.mean(val)  
+            if monitor == 'wandb':
+                wandb.log({ kmetric: aux_vd_metrics[kmetric] })
+                
         if verbose:
             progress(
                 current=0, total=0, train=False, bar=False, time=time.time()-ini,
-                vae_loss=total_vae_loss, rec_loss=total_rec_loss, KL_div=total_KL_div,
-                L1_loss=total_L1_loss, zeros_loss=total_zeros_loss, ones_loss=total_ones_loss,
-                compression_ratio=total_compression_ratio, imputation_L1_loss=total_imputation_L1_loss if model['imputation'] else [0]
+                vae_loss=aux_vd_metrics['aux_ae_loss'],
+                rec_loss=aux_vd_metrics['aux_reconstruction_loss'],
+                KL_div=aux_vd_metrics['aux_KL_divergence'],
+                L1_loss=aux_vd_metrics['aux_L1_loss'],
+                zeros_loss=aux_vd_metrics['aux_zeros_reconstruction_loss'],
+                ones_loss=aux_vd_metrics['aux_ones_reconstruction_loss'],
             )
-        
-        if model['imputation']: return total_vae_loss, total_rec_loss, total_KL_div, total_L1_loss, total_zeros_loss, total_ones_loss, total_imputation_L1_loss
-        else: return total_vae_loss, total_rec_loss, total_KL_div, total_L1_loss, total_zeros_loss, total_ones_loss
+            
+    return aux_vd_metrics
 
 @timer
 def test(model, ts_loader, epoch, metadata, show_original=False, only=None, conditional=False, monitor=None, device='cpu'):
