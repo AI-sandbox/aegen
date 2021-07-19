@@ -18,6 +18,7 @@ from models.initializers import init_xavier
 from utils.decorators import timer 
 from utils.loggers import progress, latentPCA, saver, system_info
 from utils.simulators import OnlineSimulator
+from utils.assemblers import one_hot_encoder
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -97,8 +98,10 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 labels = batch[1].to(device) if model['conditional'] else None
             else: 
                 snps_array, labels = online_simulator.simulate()
-                snps_array, labels = snps_array.to(device), labels.to(device)
+                snps_array, labels = snps_array.to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
                 labels = labels if model['conditional'] else None
+                print(labels.shape)
+                print(snps_array.shape)
             
             ## Forward inputs through net.
             if model['distribution'] == 'Gaussian':
@@ -230,6 +233,25 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 num=num, 
                 state={
                     'epoch': epoch + 1,
+                    'tr_time': time.time() - ini,
+                    'verbose': stats['verbose'],
+                    'slide': stats['slide'],
+                    'best_epoch': best_epoch,
+                    'best_loss': best_loss,
+                    # Training stats:
+                    'tr_metrics': tr_metrics,
+                    # Validation stats:
+                    'vd_metrics': vd_metrics
+                }
+            )
+        
+        ## Save checkpoint according checkpointing scheduler.
+        elif epoch % hyperparams['checkpointing']['scheduler'] == 0:
+            saver(
+                obj='stats',
+                num=num, 
+                state={
+                    'epoch': epoch + 1,
                     'verbose': stats['verbose'],
                     'slide': stats['slide'],
                     'best_epoch': best_epoch,
@@ -253,24 +275,6 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 conditional=model['conditional'], 
                 monitor=monitor,
                 device=device
-            )
-            
-        ## Save checkpoint according checkpointing scheduler.
-        if epoch % hyperparams['checkpointing']['scheduler'] == 0:
-            saver(
-                obj='stats',
-                num=num, 
-                state={
-                    'epoch': epoch + 1,
-                    'verbose': stats['verbose'],
-                    'slide': stats['slide'],
-                    'best_epoch': best_epoch,
-                    'best_loss': best_loss,
-                    # Training stats:
-                    'tr_metrics': tr_metrics,
-                    # Validation stats:
-                    'vd_metrics': vd_metrics
-                }
             )
     
     print(f'Training finished in {time.time() - ini}s.')
@@ -339,7 +343,7 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
         for kmetric,val in aux_vd_metrics.items():
             aux_vd_metrics[kmetric] = np.mean(val)  
             if monitor == 'wandb':
-                wandb.log({ kmetric: aux_vd_metrics[kmetric] })
+                wandb.log({ 'vd'+kmetric[3:] : aux_vd_metrics[kmetric] })
                 
         if verbose:
             progress(

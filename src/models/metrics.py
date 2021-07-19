@@ -1,4 +1,6 @@
-
+import torch
+import numpy as np
+import blosc2 as blosc
 
 def create_metrics_dict(metrics, prefix='train'):
     metrics_dict = {}
@@ -18,5 +20,82 @@ def create_metrics_dict(metrics, prefix='train'):
                 metrics_dict[f'{prefix}_{p}_{kmetric}'] = []
     return metrics_dict
 
-def metacompressor_metric(x,z,o,p=None):
-    return 4
+def metacompressor_metric(x, mu, xhat, algorithm=None):
+    if algorithm is None: raise Exception('Compression algorithm not defined.')
+    
+    if isinstance(x, np.ndarray): x = x.astype(bool)
+    elif isinstance(x, torch.Tensor): x = x.cpu().detach().numpy().astype(bool)
+    
+    if isinstance(mu, np.ndarray): mu = mu.astype(float)
+    elif isinstance(mu, torch.Tensor): mu = mu.cpu().detach().numpy().astype(float)
+        
+    if isinstance(xhat, np.ndarray): xhat = xhat.astype(bool)
+    elif isinstance(xhat, torch.Tensor): xhat = xhat.cpu().detach().numpy().astype(bool)    
+    
+    xbin  = x.tostring()
+    mubin = mu.tostring()
+    xhatbin  = xhat.tostring()
+    
+    mucom = blosc.compress(
+        mubin, 
+        typesize=4, 
+        cname=algorithm,
+        shuffle=blosc.BITSHUFFLE
+    )
+    
+    xhatcom = blosc.compress(
+        xhatbin, 
+        typesize=1, 
+        cname=algorithm,
+        shuffle=blosc.BITSHUFFLE
+    )
+    
+    return len(xbin)/(len(mucom) + len(xhatcom))
+
+def metacompressor_metric_compressed(x, mu, xhat, algorithm=None):
+    if algorithm is None: raise Exception('Compression algorithm not defined.')
+    
+    if isinstance(x, np.ndarray): x = x.astype(bool)
+    elif isinstance(x, torch.Tensor): x = x.cpu().detach().numpy().astype(bool)
+    
+    if isinstance(mu, np.ndarray): mu = mu.astype(float)
+    elif isinstance(mu, torch.Tensor): mu = mu.cpu().detach().numpy().astype(float)
+        
+    if isinstance(xhat, np.ndarray): xhat = xhat.astype(bool)
+    elif isinstance(xhat, torch.Tensor): xhat = xhat.cpu().detach().numpy().astype(bool)    
+    
+    xbin  = x.tostring()
+    mubin = mu.tostring()
+    xhatbin  = xhat.tostring()
+    
+    xcom = blosc.compress(
+        xbin, 
+        typesize=1, 
+        cname=algorithm,
+        shuffle=blosc.BITSHUFFLE
+    )
+    
+    mucom = blosc.compress(
+        mubin, 
+        typesize=4, 
+        cname=algorithm,
+        shuffle=blosc.BITSHUFFLE
+    )
+    
+    xhatcom = blosc.compress(
+        xhatbin, 
+        typesize=1, 
+        cname=algorithm,
+        shuffle=blosc.BITSHUFFLE
+    )
+    
+    return len(xcom)/(len(mucom) + len(xhatcom))
+    
+    
+    
+    
+    
+    
+    
+    
+    

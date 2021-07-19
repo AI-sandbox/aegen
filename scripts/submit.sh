@@ -34,11 +34,11 @@ sbatch <<EOT
 #SBATCH -e $OUT_PATH/experiments/exp$experiment/exp$experiment.err
 
 ml load py-pytorch/1.4.0_py36
-ml load py-numpy/1.18.1_py36
+ml load py-numpy/1.19.2_py36
 ml load py-matplotlib/3.2.1_py36
 ml load py-pandas/1.0.3_py36
-ml load py-h5py/2.10.0_py36
-ml load py-scikit-learn/0.19.1_py36
+ml load py-h5py/3.1.0_py36
+ml load py-scikit-learn/0.24.2_py36
 
 # -C GPU_MEM:16GB
 
@@ -51,7 +51,7 @@ if python3 $USER_PATH/src/trainer.py \
 --verbose True \
 --num $experiment \
 --evolution False \
---conditional False \
+--conditional True \
 --imputation False;
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi

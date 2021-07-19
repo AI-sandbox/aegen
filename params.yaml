@@ -86,7 +86,7 @@ hyperparams:
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
        simulation: online
-       n_batches: 100
+       n_batches: 20
        device: cpu
        mode: uniform
        balanced: true

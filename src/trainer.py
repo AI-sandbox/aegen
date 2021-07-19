@@ -12,9 +12,9 @@ import torch.nn as nn
 
 from parser import create_parser
 
-from models.VAEgen import AEgen
+from models.aegen import aegen
 from models.losses import aeloss, L1loss
-from models.metrics import metacompressor_metric
+from models.metrics import metacompressor_metric, metacompressor_metric_compressed
 
 from utils.loader import loader 
 from utils.loggers import system_info
@@ -122,7 +122,7 @@ if __name__ == '__main__':
             log.info(f"\tVD SET has {vd_metadata['n_populations']} populations.")
     log.info(f'Data ready ++')
     #======================== Prepare model ========================#
-    model = AEgen(
+    model = aegen(
         params=model_params, 
         conditional=args.conditional,
         imputation=args.imputation,
@@ -258,6 +258,11 @@ if __name__ == '__main__':
             'compression_ratio' : {
                 'inputs' : ['input', 'mu', 'reconstruction'],
                 'function': metacompressor_metric,
+                'params' : ['lz4', 'zlib', 'zstd']
+            },
+            'compressed_compression_ratio' : {
+                'inputs' : ['input', 'mu', 'reconstruction'],
+                'function': metacompressor_metric_compressed,
                 'params' : ['lz4', 'zlib', 'zstd']
             },
         }

@@ -380,16 +380,18 @@ class Decoder(nn.Module):
         if self.shape == 'global':
             modules = []
             for i in range(depth):
-                modules.append(FullyConnected(
-                    ## Only can condition input (layer0).
-                    input = (
-                        params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
-                    ) if i == 0 else params[f'layer{i}']['size'],
-                    output     = params[f'layer{i + 1}']['size'],
-                    dropout    = params[f'layer{i}']['dropout'],
-                    normalize  = params[f'layer{i}']['normalize'],
-                    activation = params[f'layer{i}']['activation'],
-                ))
+                modules.append(
+                    FullyConnected(
+                        ## Only can condition input (layer0).
+                        input = (
+                            params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
+                        ) if i == 0 else params[f'layer{i}']['size'],
+                        output     = params[f'layer{i + 1}']['size'],
+                        dropout    = params[f'layer{i}']['dropout'],
+                        normalize  = params[f'layer{i}']['normalize'],
+                        activation = params[f'layer{i}']['activation'],
+                    )
+                )
             self.FCs = nn.Sequential(*modules)
         elif self.shape == 'window-based':
             modules = {}
@@ -403,8 +405,6 @@ class Decoder(nn.Module):
                         zsize += num_classes
                     if i == depth - 1:
                         wsize = self.window_size
-                        if num_classes is not None:
-                            wsize += num_classes
                         if w == self.n_windows - 1:
                             wsize += (params[f'layer{depth}']['size'] % self.window_size)
                     else: wsize = params[f'layer{i + 1}']['size']
@@ -503,7 +503,7 @@ class Decoder(nn.Module):
             return o
         else: raise Exception('Unknown shape.')
 
-class AEgen(nn.Module):
+class aegen(nn.Module):
     def __init__(self, params, conditional=False, sample_mode=False, imputation=False):
         super().__init__()
         ## AE shape can be:
