@@ -38,11 +38,11 @@ if __name__ == '__main__':
         if (model_params['num_classes'] is not None) and conditional:
             shape = 'C-'+model_params['shape']
         else:
-            shape = model_params['shape'].capitalize()
+            shape = model_params['shape']
         layer_sizes = [str(model_params['encoder'][layer]['size']) for layer in model_params['encoder'].keys()]
         hyper = f'optimizer {hyperparams["optimizer"]["algorithm"]} with lr={hyperparams["optimizer"]["lr"]} and decay={hyperparams["optimizer"]["weight_decay"]}'
         data = f'using {hyperparams["training"]["simulation"]} simulation'
-        name = f'[{exp}] {species.capitalize()} chr{chr}: {shape}({",".join(layer_sizes)}), {hyper}, '
+        name = f'[{exp}] {species.capitalize()} chr{chr}: {model_params["distribution"]} {shape}({",".join(layer_sizes)}), {hyper}, '
         return name
     
     summary = summary_net(args.num, args.species, args.chr, model_params, hyperparams, args.conditional)
@@ -142,6 +142,7 @@ if __name__ == '__main__':
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log.info(f'Number of model parameters: {num_params}')
     system_info()
+    log.info(model)
     log.info('Model ready ++')
     #======================== Prepare optimizer ========================#
     if hyperparams['optimizer'] is not None:
@@ -256,12 +257,12 @@ if __name__ == '__main__':
             ## Then define the inputs, the function,
             ## and the hyperparameters for the function.
             'compression_ratio' : {
-                'inputs' : ['input', 'mu', 'reconstruction'],
+                'inputs' : ['input', 'mu', 'reconstruction', 'distribution'],
                 'function': metacompressor_metric,
                 'params' : ['lz4', 'zlib', 'zstd']
             },
             'compressed_compression_ratio' : {
-                'inputs' : ['input', 'mu', 'reconstruction'],
+                'inputs' : ['input', 'mu', 'reconstruction', 'distribution'],
                 'function': metacompressor_metric_compressed,
                 'params' : ['lz4', 'zlib', 'zstd']
             },

@@ -62,7 +62,8 @@ class Encoder(nn.Module):
 
         ## Check if activations are correct.                
         if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Tanh'):
-            raise Exception('[ERROR] Missing tanh activation!') 
+            print(params[f'layer{depth - 2}']['activation'])
+            raise Exception('[ERROR] Missing tanh activation!')
         if (self.latent_distribution == 'Gaussian') and (params[f'layer{depth - 1}']['activation'] != None):
             print('[WARNING] Activation for Mu and Logvar features is not the identity.')
             
@@ -333,7 +334,7 @@ class Quantizer(nn.Module):
         ## uses a threshold to binarize the 
         ## latent vectors.
         if self.latent_distribution == 'Multi-Bernoulli':
-            zq = torch.ones(ze.shape)
+            zq = torch.ones(ze.shape).cuda()
             zq[ze < 0] = -1
         ## In Uniform LS, the quantizer
         ## computes the distances to the

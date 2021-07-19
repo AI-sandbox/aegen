@@ -3,14 +3,18 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def aeloss(x, o, mu, logvar, beta=1, backward=False):
+def aeloss(x, o, mu, logvar=None, beta=1, backward=False):
 
     loss = F.binary_cross_entropy(o, x, reduction='sum')
-    KL_divergence = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
- 
-    if backward:
-        return loss
-    return (loss +  beta * KL_divergence).item(), loss.item(), KL_divergence.item()
+    if logvar is not None:
+        KL_divergence = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        if backward:
+            return (loss +  beta * KL_divergence)
+        return (loss +  beta * KL_divergence).item(), loss.item(), KL_divergence.item()
+    else:
+        if backward:
+            return loss
+        return loss.item(), loss.item(), 0
 
 def L1loss(x, o, partial=True, proportion=True):
     loss = F.l1_loss((o > 0.5).float(), x, reduction='sum')

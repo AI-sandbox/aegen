@@ -100,8 +100,6 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 snps_array, labels = online_simulator.simulate()
                 snps_array, labels = snps_array.to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
                 labels = labels if model['conditional'] else None
-                print(labels.shape)
-                print(snps_array.shape)
             
             ## Forward inputs through net.
             if model['distribution'] == 'Gaussian':
@@ -110,12 +108,15 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 if model['shape'] == 'window-based':
                     mu = torch.cat(mu, axis=-1)
                     logvar = torch.cat(logvar, axis=-1)
-            else: z = mu = model['body'].encoder(snps_array, labels)
+            else: 
+                z = model['body'].encoder(snps_array, labels)
+                z = mu = model['body'].quantizer(z)
             snps_reconstruction = model['body'].decoder(z, labels)
             input_mapper = {
                 'input' : snps_array,
                 'reconstruction' : snps_reconstruction,
                 'mu' : mu,
+                'distribution' : model['distribution']
             }
             if model['distribution'] == 'Gaussian': input_mapper['logvar'] = logvar
             
@@ -138,7 +139,9 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                         epoch_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
             # Backpropagation.
             optimizer['body'].zero_grad()
-            aeloss(snps_array, snps_reconstruction, mu, logvar, backward=True).backward()
+            if model['distribution'] == 'Gaussian':
+                aeloss(snps_array, snps_reconstruction, mu, logvar, backward=True).backward()
+            else: aeloss(snps_array, snps_reconstruction, mu, backward=True).backward()
             
             # One step of the optimizer (using the gradients from backpropagation).
             optimizer['body'].step()
@@ -147,7 +150,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             del snps_array
             del labels
             del mu
-            del logvar
+            if model['distribution'] == 'Gaussian': del logvar
             del z
             del snps_reconstruction
             gc.collect()
@@ -310,6 +313,7 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
                 'input' : snps_array,
                 'reconstruction' : snps_reconstruction,
                 'mu' : mu,
+                'distribution' : model['distribution'],
             }
             if model['distribution'] == 'Gaussian': input_mapper['logvar'] = logvar
             
@@ -334,7 +338,7 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
             del snps_array
             del labels
             del mu
-            del logvar
+            if model['distribution'] == 'Gaussian': del logvar
             del z
             del snps_reconstruction
             gc.collect()
