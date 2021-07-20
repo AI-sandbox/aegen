@@ -33,6 +33,9 @@ sbatch <<EOT
 #SBATCH -o $OUT_PATH/experiments/exp$experiment/exp$experiment.log
 #SBATCH -e $OUT_PATH/experiments/exp$experiment/exp$experiment.err
 
+ml load python/3.6.1
+#source env/bin/activate
+ml load cuda
 ml load py-pytorch/1.4.0_py36
 ml load py-numpy/1.19.2_py36
 ml load py-matplotlib/3.2.1_py36
