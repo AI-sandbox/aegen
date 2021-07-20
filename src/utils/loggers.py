@@ -112,6 +112,5 @@ def system_info():
     log.info(f'Total physical memory (exclusive swap): {psutil.virtual_memory().total // (2**30)} GB')
     log.info(f'Total available memory: {psutil.virtual_memory().available // (2**30)} GB')
     log.info(f'Percentage of used RAM: {psutil.virtual_memory().percent}%')
-    log.info(f'Percentage of available memory: {psutil.virtual_memory().available * 100 / psutil.virtual_memory().total}%')
-    log.info('='*50+'\n\n')
+    log.info(f'Percentage of available memory: {psutil.virtual_memory().available * 100 / psutil.virtual_memory().total}%\n'+('='*50)+'\n\n')
     
