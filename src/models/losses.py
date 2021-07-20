@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 def aeloss(x, o, mu, logvar=None, beta=1, backward=False):
-
+    x, o, mu = x.float(), o.float(), mu.float()
     loss = F.binary_cross_entropy(o, x, reduction='sum')
     if logvar is not None:
         KL_divergence = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
@@ -17,11 +17,12 @@ def aeloss(x, o, mu, logvar=None, beta=1, backward=False):
         return loss.item(), loss.item(), 0
 
 def L1loss(x, o, partial=True, proportion=True):
-    loss = F.l1_loss((o > 0.5).float(), x, reduction='sum')
+    x, o = x.float(), o.float()
+    loss = F.l1_loss(o, x, reduction='sum')
     
     if partial:
         x, o = x.cpu(), o.cpu()
-        one_hot_neg = (x - (o.detach() > 0.5).float()).flatten()
+        one_hot_neg = (x - o.detach()).flatten()
         loss_zeros = len(np.where(one_hot_neg == -1)[0])
         loss_ones = len(np.where(one_hot_neg == 1)[0])
         ones = len(np.where(x == 1)[0])

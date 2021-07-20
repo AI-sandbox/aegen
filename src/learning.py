@@ -113,10 +113,13 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 z = mu = model['body'].quantizer(z)
             snps_reconstruction = model['body'].decoder(z, labels)
             input_mapper = {
-                'input' : snps_array,
-                'reconstruction' : snps_reconstruction,
-                'mu' : mu,
-                'distribution' : model['distribution']
+                'input' : snps_array.bool(),
+                'output': snps_reconstruction.float(),
+                'reconstruction' : (snps_reconstruction > 0.5).bool(),
+                'residual' : abs(snps_array - (snps_reconstruction > 0.5).float()).bool(),
+                'mu' : mu.float() if model['distribution'] == 'Gaussian' else mu.bool(),
+                'distribution' : model['distribution'],
+                'batch_size' : int(snps_array.shape[0]),
             }
             if model['distribution'] == 'Gaussian': input_mapper['logvar'] = logvar
             
@@ -170,6 +173,8 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         for kmetric, meta in metrics.items():
             if callable(kmetric):
                 for name in meta['outputs']:
+                    print(f'aux_{name}')
+                    print(epoch_metrics[f'aux_{name}'])
                     val = np.mean(epoch_metrics[f'aux_{name}'][-stats['slide']:])
                     tr_metrics[f'tr_{name}'].append(val)
             else:
@@ -307,13 +312,18 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
                 if model['shape'] == 'window-based':
                     mu = torch.cat(mu, axis=-1)
                     logvar = torch.cat(logvar, axis=-1)
-            else: z = mu = model['body'].encoder(snps_array, labels)
+            else: 
+                z = model['body'].encoder(snps_array, labels)
+                z = mu = model['body'].quantizer(z)
             snps_reconstruction = model['body'].decoder(z, labels)
             input_mapper = {
-                'input' : snps_array,
-                'reconstruction' : snps_reconstruction,
-                'mu' : mu,
+                'input' : snps_array.bool(),
+                'output': snps_reconstruction.float(),
+                'reconstruction' : (snps_reconstruction > 0.5).bool(),
+                'residual' : abs(snps_array - (snps_reconstruction > 0.5).float()).bool(),
+                'mu' : mu.float() if model['distribution'] == 'Gaussian' else mu.bool(),
                 'distribution' : model['distribution'],
+                'batch_size' : int(snps_array.shape[0]),
             }
             if model['distribution'] == 'Gaussian': input_mapper['logvar'] = logvar
             

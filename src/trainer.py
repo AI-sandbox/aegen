@@ -14,7 +14,7 @@ from parser import create_parser
 
 from models.aegen import aegen
 from models.losses import aeloss, L1loss
-from models.metrics import metacompressor_metric, metacompressor_metric_compressed
+from models.metrics import metacompressor_metric, metacompressor_metric_compressed, residual_sparsity
 
 from utils.loader import loader 
 from utils.loggers import system_info
@@ -246,23 +246,27 @@ if __name__ == '__main__':
             ## Then define the inputs and the expected outputs
             ## of the function to store the metrics.
             aeloss: {
-                'inputs' : ['input', 'reconstruction', 'mu', 'logvar'],
+                'inputs' : ['input', 'output', 'mu', 'logvar'],
                 'outputs': ['ae_loss', 'reconstruction_loss', 'KL_divergence'],
             },
             L1loss: {
                 'inputs' : ['input', 'reconstruction'],
                 'outputs': ['L1_loss', 'ones_reconstruction_loss', 'zeros_reconstruction_loss'],
             },
+            residual_sparsity: {
+                'inputs' : ['input', 'reconstruction', 'batch_size'],
+                'outputs': ['residual_sparsity'],
+            },
             ## If the key is a metric name:
             ## Then define the inputs, the function,
             ## and the hyperparameters for the function.
             'compression_ratio' : {
-                'inputs' : ['input', 'mu', 'reconstruction', 'distribution'],
+                'inputs' : ['input', 'mu', 'residual', 'distribution'],
                 'function': metacompressor_metric,
                 'params' : ['lz4', 'zlib', 'zstd']
             },
             'compressed_compression_ratio' : {
-                'inputs' : ['input', 'mu', 'reconstruction', 'distribution'],
+                'inputs' : ['input', 'mu', 'residual', 'distribution'],
                 'function': metacompressor_metric_compressed,
                 'params' : ['lz4', 'zlib', 'zstd']
             },

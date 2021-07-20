@@ -1,7 +1,11 @@
 import torch
 import numpy as np
 import blosc2 as blosc
+import ctypes
 
+## Function to create a metrics dictionary.
+## Specifies a prefix for the metrics according
+## the split set on which they have been obtained.
 def create_metrics_dict(metrics, prefix='train'):
     metrics_dict = {}
     if (prefix == 'train') or (prefix == 'tr'):
@@ -20,100 +24,73 @@ def create_metrics_dict(metrics, prefix='train'):
                 metrics_dict[f'{prefix}_{p}_{kmetric}'] = []
     return metrics_dict
 
-def metacompressor_metric(x, mu, xhat, distribution=None, algorithm=None):
+## Formats correctly the input tensors.
+def to_numpy(x, z, r, distribution=None):
+        
+    def _to_numpy(x):
+        if isinstance(x, np.ndarray): return x
+        elif isinstance(x, torch.Tensor): return x.cpu().detach().numpy()
+        
+    def _make01(z):
+        z = (z + 1) / 2
+        return z
+    
+    x = _to_numpy(x).astype(bool)
+    if distribution == 'Gaussian': z = _to_numpy(z).astype(float)
+    else: z = _make01(_to_numpy(z)).astype(bool)
+    r =  _to_numpy(r).astype(bool) 
+    return x, z, r
+
+## Transforms x, z, r to binary representation, for compression.
+## Takes into account the datatype of the object.
+## Returns x.bin, z.bin and r.bin.   
+def to_binary(x, z, r):
+    return x.tostring(), z.tostring(), r.tostring()
+
+## Return elementary datatype size in bytes.
+def elem_tsize(x):
+    if x.dtype == 'bool': tsize = ctypes.sizeof(ctypes.c_bool)
+    elif x.dtype == 'float': tsize = ctypes.sizeof(ctypes.c_float)
+    elif x.dtype == 'int': tsize = ctypes.sizeof(ctypes.c_int)
+    else: raise Exception('Unknown datatype.')
+    return tsize
+
+## Compressed length in bytes.
+def clen(x, typesize, algorithm, shuffle=blosc.BITSHUFFLE):
+    return len(blosc.compress(x, typesize=typesize, cname=algorithm, shuffle=shuffle))
+
+## Ratio between (original x size) vs (compressed latent representation + compressed residual).
+## Computes the compression ratio of the system.
+## Above 1 is good.
+def metacompressor_metric(x, z, r, distribution=None, algorithm=None):
     if distribution is None: raise Exception('Latent space distribution not defined.')
     if algorithm is None: raise Exception('Compression algorithm not defined.')
     
-    if isinstance(x, np.ndarray): x = x.astype(bool)
-    elif isinstance(x, torch.Tensor): x = x.cpu().detach().numpy().astype(bool)
+    x, z, r = to_numpy(z, x, r, distribution=distribution)
+    xbin, zbin, recbin = to_binary(x, z, r)  
+    clen_zbin, clen_recbin = clen(zbin, elem_tsize(z), algorithm), clen(recbin, elem_tsize(r), algorithm)
     
-    if isinstance(mu, np.ndarray): 
-        if distribution == 'Gaussian':
-            mu = mu.astype(float)
-        else:
-            mu = (mu + 1) / 2
-            mu = mu.astype(bool)
-    elif isinstance(mu, torch.Tensor): 
-        if distribution == 'Gaussian':
-            mu = mu.cpu().detach().numpy().astype(float)
-        else:
-            mu = mu.cpu().detach().numpy()
-            mu = (mu + 1) / 2
-            mu = mu.astype(bool)
+    return len(xbin) / (clen_zbin + clen_recbin)
 
-    if isinstance(xhat, np.ndarray): xhat = xhat.astype(bool)
-    elif isinstance(xhat, torch.Tensor): xhat = xhat.cpu().detach().numpy().astype(bool)    
-    
-    xbin  = x.tostring()
-    mubin = mu.tostring()
-    xhatbin  = xhat.tostring()
-    
-    mucom = blosc.compress(
-        mubin, 
-        typesize=4 if distribution == 'Gaussian' else 1, 
-        cname=algorithm,
-        shuffle=blosc.BITSHUFFLE
-    )
-    
-    xhatcom = blosc.compress(
-        xhatbin, 
-        typesize=1, 
-        cname=algorithm,
-        shuffle=blosc.BITSHUFFLE
-    )
-    
-    return len(xbin)/(len(mucom) + len(xhatcom))
-
-def metacompressor_metric_compressed(x, mu, xhat, distribution=None, algorithm=None):
+## Ratio between (compressed x size) vs (compressed latent representation + compressed residual).
+## Computes the improvement of the compression ratio over the compression algorithm.
+## Above 1 is good.
+def metacompressor_metric_compressed(x, z, r, distribution=None, algorithm=None):
     if distribution is None: raise Exception('Latent space distribution not defined.')
     if algorithm is None: raise Exception('Compression algorithm not defined.')
     
-    if isinstance(x, np.ndarray): x = x.astype(bool)
-    elif isinstance(x, torch.Tensor): x = x.cpu().detach().numpy().astype(bool)
+    x, z, r = to_numpy(z, x, r, distribution=distribution)
+    xbin, zbin, recbin = to_binary(x, z, r)  
+    clen_xbin, clen_zbin, clen_recbin = clen(xbin, elem_tsize(x), algorithm), clen(zbin, elem_tsize(z), algorithm), clen(recbin, elem_tsize(r), algorithm)
     
-    if isinstance(mu, np.ndarray): 
-        if distribution == 'Gaussian':
-            mu = mu.astype(float)
-        else:
-            mu = (mu + 1) / 2
-            mu = mu.astype(bool)
-    elif isinstance(mu, torch.Tensor): 
-        if distribution == 'Gaussian':
-            mu = mu.cpu().detach().numpy().astype(float)
-        else:
-            mu = mu.cpu().detach().numpy()
-            mu = (mu + 1) / 2
-            mu = mu.astype(bool)
-       
-    if isinstance(xhat, np.ndarray): xhat = xhat.astype(bool)
-    elif isinstance(xhat, torch.Tensor): xhat = xhat.cpu().detach().numpy().astype(bool)    
-    
-    xbin  = x.tostring()
-    mubin = mu.tostring()
-    xhatbin  = xhat.tostring()
-    
-    xcom = blosc.compress(
-        xbin, 
-        typesize=1, 
-        cname=algorithm,
-        shuffle=blosc.BITSHUFFLE
-    )
-    
-    mucom = blosc.compress(
-        mubin, 
-        typesize=4 if distribution == 'Gaussian' else 1, 
-        cname=algorithm,
-        shuffle=blosc.BITSHUFFLE
-    )
-    
-    xhatcom = blosc.compress(
-        xhatbin, 
-        typesize=1, 
-        cname=algorithm,
-        shuffle=blosc.BITSHUFFLE
-    )
-    
-    return len(xcom)/(len(mucom) + len(xhatcom))
+    return clen_xbin / (clen_zbin + clen_recbin)
+
+## Computes L1 loss between input and rexonstruction
+## to quantify the sparsity of the residual vector.
+def residual_sparsity(x, xhat, batch_size=None):
+    if batch_size is None: raise Exception('Batch size is mising.')
+    x, xhat = x.float().cpu().detach(), xhat.float().cpu().detach()
+    return [abs(x - xhat).sum().item() // batch_size]
     
     
     
