@@ -5,13 +5,21 @@ model:
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
-  window_size: 5000
+  window_size: 128
+  ## If [window-based] define window_cloning, otherwise leave it null.
+  window_cloning: false
   ## Distribution can be: [Gaussian, Multi-Bernoulli, Uniform].
   distribution: Multi-Bernoulli
   ## If distribution is [Uniform] define codebook_size.
   codebook_size: 25
   ## If model is conditioned define number of classes.
-  num_classes: 7
+  conditioning:
+      using: true
+      num_classes: 7
+  ## If denoising mode is turned on.
+  denoising:
+      using: false
+      missing: 0
   ## Architecture of Encoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -23,19 +31,14 @@ model:
       size: 317408
       dropout: 0
       normalize: true
-      activation: ReLU
-    layer1: 
-      size: 1024
-      dropout: 0.5
-      normalize: true
-      activation: ReLU
-    layer2: 
-      size: 512
+      activation: 
+    layer1:
+      size: 64
       dropout: 0
       normalize: true
       activation: Tanh
-    layer3: 
-      size: 256
+    layer2: 
+      size: 64
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -44,21 +47,16 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 256
+      size: 64
       dropout: 0
       normalize: true
       activation: ReLU
-    layer1:
-      size: 512
-      dropout: 0.5
-      normalize: true
-      activation: ReLU
-    layer2:
-      size: 1024
+    layer0:
+      size: 64
       dropout: 0
       normalize: true
       activation: Sigmoid
-    layer3:
+    layer1:
       size: 317408
 
 ## Hyperparameters for training.
@@ -68,9 +66,9 @@ hyperparams:
   beta: 1
   ## Optimizer algorithm can be: [Adam, AdamW, SparseAdam].
   optimizer:
-       algorithm: Adam
+       algorithm: AdamW
        lr: 0.0001
-       weight_decay: 0
+       weight_decay: 0.01
   ## Scheduler can be: [null, plateau, step, multistep, exponential].
   scheduler: 
        method: plateau

@@ -32,12 +32,6 @@ def create_parser():
         metavar='STR',
         help='Path of YAML file with parameters and hyperparameters defined in [STR]'
     )
-    parser.add_argument('--experiment', 
-        type=str, 
-        default=None, 
-        metavar='STR',
-        help='Summary of the experiment defined in [STR]'
-    )
     parser.add_argument('--num', 
         type=int, 
         default=0, 
@@ -61,18 +55,6 @@ def create_parser():
         default=None, 
         metavar='INT',
         help='Use data only from population by label [INT]'
-    )
-    parser.add_argument('--conditional', 
-        type=parse_bool, 
-        default=False, 
-        metavar='BOOL',
-        help='Conditional VAE by bool [BOOL]'
-    )
-    parser.add_argument('--imputation', 
-        type=parse_bool, 
-        default=False, 
-        metavar='BOOL',
-        help='Imputation VAE by bool [BOOL]'
     )
 
     return parser
