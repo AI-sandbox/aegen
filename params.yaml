@@ -31,14 +31,14 @@ model:
       size: 317408
       dropout: 0
       normalize: true
-      activation: 
+      activation: ReLU
     layer1:
-      size: 64
+      size: 128
       dropout: 0
       normalize: true
       activation: Tanh
     layer2: 
-      size: 64
+      size: 128
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -47,12 +47,12 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 64
+      size: 128
       dropout: 0
       normalize: true
       activation: ReLU
     layer0:
-      size: 64
+      size: 128
       dropout: 0
       normalize: true
       activation: Sigmoid

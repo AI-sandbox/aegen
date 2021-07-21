@@ -34,8 +34,8 @@ if __name__ == '__main__':
     hyperparams = params['hyperparams']
     ksize=int(model_params['encoder']['layer0']['size'] / 1000)
     
-    def summary_net(exp, species, chr, model_params, hyperparams, conditional):
-        if (model_params['num_classes'] is not None) and conditional:
+    def summary_net(exp, species, chr, model_params, hyperparams):
+        if (model_params['conditioning']['num_classes'] is not None) and (model_params['conditioning']['using']):
             shape = 'C-'+model_params['shape']
         else:
             shape = model_params['shape']
@@ -45,7 +45,7 @@ if __name__ == '__main__':
         name = f'[{exp}] {species.capitalize()} chr{chr}: {model_params["distribution"]} {shape}({",".join(layer_sizes)}), {hyper}, '
         return name
     
-    summary = summary_net(args.num, args.species, args.chr, model_params, hyperparams, args.conditional)
+    summary = summary_net(args.num, args.species, args.chr, model_params, hyperparams)
     
     #======================== Prepare data ========================#
     system_info()
@@ -62,7 +62,7 @@ if __name__ == '__main__':
             split_set='valid',
             ksize=ksize,
             only=args.only,
-            conditional=args.conditional,
+            conditional=model_params['conditioning']['using'],
         )
         log.info(f'TR data loaded.')
         log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
@@ -81,7 +81,7 @@ if __name__ == '__main__':
             split_set='valid',
             ksize=ksize,
             only=args.only,
-            conditional=args.conditional
+            conditional=model_params['conditioning']['using']
         )
         log.info(f'VD data loaded.')
         log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
@@ -99,7 +99,7 @@ if __name__ == '__main__':
                 split_set='test',
                 ksize=ksize,
                 only=args.only,
-                conditional=args.conditional
+                conditional=model_params['conditioning']['using']
             )
             log.info(f'TS data loaded.')
             log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
@@ -124,8 +124,8 @@ if __name__ == '__main__':
     #======================== Prepare model ========================#
     model = aegen(
         params=model_params, 
-        conditional=args.conditional,
-        imputation=args.imputation,
+        conditional=model_params['conditioning']['using'],
+        imputation=model_params['denoising']['using'],
         sample_mode=False,
     )
 
@@ -204,15 +204,15 @@ if __name__ == '__main__':
     system_info()
     train(
         model={
-            'architecture': model_params['shape'] + (' AE' if not args.conditional else ' C-AE'),
+            'architecture': model_params['shape'] + (' AE' if not model_params['conditioning']['using'] else ' C-AE'),
             'shape':model_params['shape'],
             'distribution': model_params['distribution'],
             'body': model, 
             'parallel': model_parallel,
             'num_params': num_params,
-            'conditional': args.conditional,
-            'num_classes': model_params['num_classes'],
-            'imputation': args.imputation,
+            'conditional': model_params['conditioning']['using'],
+            'num_classes': model_params['conditioning']['num_classes'],
+            'imputation': model_params['denoising']['using'],
             'gpu': torch.cuda.get_device_name(),
         }, 
         optimizer={

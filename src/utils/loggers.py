@@ -93,13 +93,13 @@ def saver(obj, num, state):
 
     if obj == 'model':
         log.info('Storing best weights.')
-        torch.save(state, os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/VAEgen_weights_{num}.pt'))
+        torch.save(state, os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/aegen_weights_{num}.pt'))
     elif obj == 'optimizer':
         log.info('Storing optimizer state.')
-        torch.save(state, os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/OPT_state_{num}.pt'))
+        torch.save(state, os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/opt_state_{num}.pt'))
     elif obj == 'stats':
         log.info('Storing stats.')
-        torch.save(state, os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/VAEgen_stats_{num}.pt'))
+        torch.save(state, os.path.join(os.environ.get('OUT_PATH'), f'experiments/exp{num}/aegen_stats_{num}.pt'))
     else: 
         log.error('Unknown object to store. Exiting...')
         exit(1)

@@ -33,7 +33,7 @@ class FullyConnected(nn.Module):
         return o
 
 class Encoder(nn.Module):
-    def __init__(self, latent_distribution, params, num_classes=None, shape='global', window_size=None, n_windows=None):
+    def __init__(self, latent_distribution, params, num_classes=None, shape='global', window_size=None, n_windows=None, window_cloning=None):
         super().__init__()
         ## Define latent distribution.
         self.latent_distribution = latent_distribution
@@ -59,6 +59,9 @@ class Encoder(nn.Module):
                                 'the number of required layers ({np.log2(self.n_windows)}).')  
             self.window_size = int(np.floor(params['layer0']['size'] / self.n_windows))
         else: raise Exception('Missing window_size and n_windows')
+        self.window_cloning = window_cloning
+        if (self.shape == 'window-based') and (self.window_cloning is None):
+            raise Exception('[ERROR] Window cloning is not defined using window-based shape.')
 
         ## Check if activations are correct.                
         if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Tanh'):
@@ -103,49 +106,69 @@ class Encoder(nn.Module):
             modules = {}
             ## For each layer and for each window we define a FC matrix.
             for i in range(depth):
-                for w in range(self.n_windows):
-                    ## If first layer0, we split the input size.
-                    ## Otherwise, we use the size defined in params.
-                    if i == 0:
+                if not self.window_cloning:
+                    for w in range(self.n_windows):
+                        ## If first layer0, we split the input size.
+                        ## Otherwise, we use the size defined in params.
+                        if i == 0:
+                            wsize = self.window_size
+                            if num_classes is not None:
+                                wsize += num_classes 
+                            if w == self.n_windows - 1:
+                                wsize += (params['layer0']['size'] % self.window_size)
+                        else: wsize = params[f'layer{i}']['size']
+                        if self.latent_distribution == 'Gaussian':
+                            modules[f'layer{i}_win{w}_mu'] = FullyConnected(
+                                input      = wsize,
+                                output     = params[f'layer{i + 1}']['size'],
+                                dropout    = params[f'layer{i}']['dropout'],
+                                normalize  = params[f'layer{i}']['normalize'],
+                                activation = params[f'layer{i}']['activation'],
+                            )
+                            modules[f'layer{i}_win{w}_logvar'] = FullyConnected(
+                                input      = wsize,
+                                output     = params[f'layer{i + 1}']['size'],
+                                dropout    = params[f'layer{i}']['dropout'],
+                                normalize  = params[f'layer{i}']['normalize'],
+                                activation = params[f'layer{i}']['activation'],
+                            )
+                        else: 
+                            modules[f'layer{i}_win{w}'] = FullyConnected(
+                                input      = wsize,
+                                output     = params[f'layer{i + 1}']['size'],
+                                dropout    = params[f'layer{i}']['dropout'],
+                                normalize  = params[f'layer{i}']['normalize'],
+                                activation = params[f'layer{i}']['activation'],
+                            )
+                else: ## Use cloning.
+                    if self.latent_distribution == 'Gaussian': raise Exception('Not implemented.')
+                    else:
                         wsize = self.window_size
                         if num_classes is not None:
                             wsize += num_classes 
-                        if w == self.n_windows - 1:
-                            wsize += (params['layer0']['size'] % self.window_size)
-                    else: wsize = params[f'layer{i}']['size']
-                    if self.latent_distribution == 'Gaussian':
-                        modules[f'layer{i}_win{w}_mu'] = FullyConnected(
-                            input      = wsize,
-                            output     = params[f'layer{i + 1}']['size'],
-                            dropout    = params[f'layer{i}']['dropout'],
-                            normalize  = params[f'layer{i}']['normalize'],
-                            activation = params[f'layer{i}']['activation'],
-                        )
-                        modules[f'layer{i}_win{w}_logvar'] = FullyConnected(
-                            input      = wsize,
-                            output     = params[f'layer{i + 1}']['size'],
-                            dropout    = params[f'layer{i}']['dropout'],
-                            normalize  = params[f'layer{i}']['normalize'],
-                            activation = params[f'layer{i}']['activation'],
-                        )
-                    else: 
-                        modules[f'layer{i}_win{w}'] = FullyConnected(
-                            input      = wsize,
-                            output     = params[f'layer{i + 1}']['size'],
-                            dropout    = params[f'layer{i}']['dropout'],
-                            normalize  = params[f'layer{i}']['normalize'],
-                            activation = params[f'layer{i}']['activation'],
-                        )
+                        modules[f'layer{i}'] = FullyConnected(
+                                input      = wsize,
+                                output     = params[f'layer{i + 1}']['size'],
+                                dropout    = params[f'layer{i}']['dropout'],
+                                normalize  = params[f'layer{i}']['normalize'],
+                                activation = params[f'layer{i}']['activation'],
+                            )
+                    
             ## We create funnels for each window.
-            if self.latent_distribution == 'Gaussian':
-                self.funnel_mu, self.funnel_logvar = nn.ModuleList(), nn.ModuleList()
-                for w in range(self.n_windows):
-                    self.funnel_mu.append(nn.Sequential(*[modules[f'layer{i}_win{w}_mu'] for i in range(depth)]))
-                    self.funnel_logvar.append(nn.Sequential(*[modules[f'layer{i}_win{w}_logvar'] for i in range(depth)]))
-            else:
-                self.funnel = nn.ModuleList()
-                for w in range(self.n_windows):
-                    self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(depth)]))
+            if not self.window_cloning:
+                if self.latent_distribution == 'Gaussian':
+                    self.funnel_mu, self.funnel_logvar = nn.ModuleList(), nn.ModuleList()
+                    for w in range(self.n_windows):
+                        self.funnel_mu.append(nn.Sequential(*[modules[f'layer{i}_win{w}_mu'] for i in range(depth)]))
+                        self.funnel_logvar.append(nn.Sequential(*[modules[f'layer{i}_win{w}_logvar'] for i in range(depth)]))
+                else:
+                    self.funnel = nn.ModuleList()
+                    for w in range(self.n_windows):
+                        self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(depth)]))
+            else: ## Use cloning.
+                if self.latent_distribution == 'Gaussian': raise Exception('Not implemented.')
+                else:
+                    self.funnel = nn.Sequential(*[modules[f'layer{i}'] for i in range(depth)])
 
         ## Shape window-based (dependent) modules definitions
         elif self.shape == 'hybrid':
@@ -248,7 +271,8 @@ class Encoder(nn.Module):
                     if c is not None:
                         x_windowed = torch.cat([x_windowed, c], -1)
                     ## Process each window with the corresponding funnel.
-                    os.append(self.funnel[w](x_windowed))
+                    if not self.window_cloning: os.append(self.funnel[w](x_windowed))
+                    else: os.append(self.funnel(x_windowed))
                 ## Concat all outputs into a single o vector.
                 o = torch.cat(os, axis=-1)
             return o
@@ -355,7 +379,7 @@ class Quantizer(nn.Module):
         return grad_ze, None
         
 class Decoder(nn.Module):
-    def __init__(self, params, num_classes=None, shape='global', window_size=None, n_windows=None):
+    def __init__(self, params, num_classes=None, shape='global', window_size=None, n_windows=None, window_cloning=None):
         super().__init__()
         ## Define the shape of the Encoder.
         self.shape = shape
@@ -376,6 +400,9 @@ class Decoder(nn.Module):
                                 'the number of required layers ({np.log2(self.n_windows)}).')  
             self.window_size = int(np.floor(params[f'layer{depth}']['size'] / self.n_windows))
         else: raise Exception('Missing window_size and n_windows')
+        self.window_cloning = window_cloning
+        if (self.shape == 'window-based') and (self.window_cloning is None):
+            raise Exception('[ERROR] Window cloning is not defined using window-based shape.')
         
         ## Shape global modules definitions.
         if self.shape == 'global':
@@ -398,18 +425,32 @@ class Decoder(nn.Module):
             modules = {}
             ## For each layer and for each window we define a FC matrix.
             for i in range(depth):
-                for w in range(self.n_windows):
-                    ## If last layerD, we split the output size.
-                    ## Otherwise, we use the size defined in params.
+                if not self.window_cloning:
+                    for w in range(self.n_windows):
+                        ## If last layerD, we split the output size.
+                        ## Otherwise, we use the size defined in params.
+                        zsize = params[f'layer{i}']['size']
+                        if (i == 0) and (num_classes is not None):
+                            zsize += num_classes
+                        if i == depth - 1:
+                            wsize = self.window_size
+                            if w == self.n_windows - 1:
+                                wsize += (params[f'layer{depth}']['size'] % self.window_size)
+                        else: wsize = params[f'layer{i + 1}']['size']
+                        modules[f'layer{i}_win{w}'] = FullyConnected(
+                            input      = zsize,
+                            output     = wsize,
+                            dropout    = params[f'layer{i}']['dropout'],
+                            normalize  = params[f'layer{i}']['normalize'],
+                            activation = params[f'layer{i}']['activation'],
+                        )
+                else:
                     zsize = params[f'layer{i}']['size']
                     if (i == 0) and (num_classes is not None):
                         zsize += num_classes
                     if i == depth - 1:
                         wsize = self.window_size
-                        if w == self.n_windows - 1:
-                            wsize += (params[f'layer{depth}']['size'] % self.window_size)
-                    else: wsize = params[f'layer{i + 1}']['size']
-                    modules[f'layer{i}_win{w}'] = FullyConnected(
+                    modules[f'layer{i}'] = FullyConnected(
                         input      = zsize,
                         output     = wsize,
                         dropout    = params[f'layer{i}']['dropout'],
@@ -417,9 +458,12 @@ class Decoder(nn.Module):
                         activation = params[f'layer{i}']['activation'],
                     )
             ## We create funnels for each window.
-            self.funnel = nn.ModuleList()
-            for w in range(self.n_windows):
-                self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(depth)]))
+            if not self.window_cloning:
+                self.funnel = nn.ModuleList()
+                for w in range(self.n_windows):
+                    self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(depth)]))
+            else:
+                self.funnel = nn.Sequential(*[modules[f'layer{i}'] for i in range(depth)])
             self.split_size = params['layer0']['size']
             
         elif self.shape == 'hybrid':
@@ -463,7 +507,8 @@ class Decoder(nn.Module):
                 z_windowed = z[..., w * self.split_size: (w + 1) * self.split_size]
                 if c is not None:
                     z_windowed = torch.cat([z_windowed, c], -1)
-                os.append(self.funnel[w](z_windowed))
+                if not self.window_cloning: os.append(self.funnel[w](z_windowed))
+                else: os.append(self.funnel(z_windowed))
             ## Concat all outputs into a single o vector.
             o = torch.cat(os, axis=-1)
             return o
@@ -514,8 +559,11 @@ class aegen(nn.Module):
         self.shape = params['shape']
         self.window_size = params['window_size'] if params['window_size'] is not None else None
         self.n_windows = params['n_windows'] if params['n_windows'] is not None else None
-        if self.window_size is not None and self.n_windows is not None:
-            raise Exception('Too many arguments.')
+        if (self.window_size is not None) and (self.n_windows is not None):
+            raise Exception('[ERROR] Too many arguments.')
+        self.window_cloning = params['window_cloning']
+        if (self.shape == 'window-based') and (self.window_cloning is None):
+            raise Exception('[ERROR] Window cloning is not defined using window-based shape.')
         ## Latent space distrubution can be:
         ## - Gaussian: regular VAE.
         ## - Multi-Bernoulli: LBAE. http://proceedings.mlr.press/v119/fajtl20a/fajtl20a.pdf
@@ -528,20 +576,22 @@ class aegen(nn.Module):
         self.encoder = Encoder(
             latent_distribution = self.latent_distribution,
             params=params['encoder'], 
-            num_classes=params['num_classes'] if conditional else None,
+            num_classes=params['conditioning']['num_classes'] if conditional else None,
             shape=self.shape,
             window_size=self.window_size,
-            n_windows=self.n_windows
+            n_windows=self.n_windows,
+            window_cloning=self.window_cloning,
         )
         ## Decoder is defined by:
         ## - Parameters: layers' definitions.
         ## - Num_classes: if conditional Decoder.
         self.decoder = Decoder(
             params=params['decoder'], 
-            num_classes=params['num_classes'] if conditional else None,
+            num_classes=params['conditioning']['num_classes'] if conditional else None,
             shape=self.shape,
             window_size=self.window_size,
-            n_windows=self.n_windows
+            n_windows=self.n_windows,
+            window_cloning=self.window_cloning,
         ) 
         ## Optionally: a quantizer.
         ## - Latent distribution.

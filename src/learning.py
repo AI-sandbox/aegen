@@ -173,8 +173,6 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         for kmetric, meta in metrics.items():
             if callable(kmetric):
                 for name in meta['outputs']:
-                    print(f'aux_{name}')
-                    print(epoch_metrics[f'aux_{name}'])
                     val = np.mean(epoch_metrics[f'aux_{name}'][-stats['slide']:])
                     tr_metrics[f'tr_{name}'].append(val)
             else:
