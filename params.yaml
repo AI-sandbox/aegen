@@ -63,8 +63,12 @@ model:
 hyperparams:
   epochs: 2000
   batch_size: 128
-  beta: 1
-  ## Optimizer algorithm can be: [Adam, AdamW, SparseAdam].
+  loss:
+      ## Variational beta.
+      beta: 1,
+      ## Varloss: using.
+      varloss: false
+  ## Optimizer algorithm can be: [Adam, AdamW].
   optimizer:
        algorithm: AdamW
        lr: 0.0001

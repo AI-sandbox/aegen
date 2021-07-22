@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-from models.losses import aeloss, L1loss
+from models.losses import *
 from models.metrics import create_metrics_dict
 from models.initializers import init_xavier
 
@@ -140,11 +140,21 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                             except KeyError: pass 
                         inputs.append(p)
                         epoch_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
+            
             # Backpropagation.
             optimizer['body'].zero_grad()
-            if model['distribution'] == 'Gaussian':
-                aeloss(snps_array, snps_reconstruction, mu, logvar, backward=True).backward()
-            else: aeloss(snps_array, snps_reconstruction, mu, backward=True).backward()
+            
+            opt_loss = aeloss(
+                snps_array, 
+                snps_reconstruction, 
+                mu, 
+                logvar if model['distribution'] == 'Gaussian' else None, 
+                backward=True
+            )
+            if hyperparams['loss']['varloss']:
+                opt_loss += varloss(mu, backward=True)
+                
+            opt_loss.backward()
             
             # One step of the optimizer (using the gradients from backpropagation).
             optimizer['body'].step()

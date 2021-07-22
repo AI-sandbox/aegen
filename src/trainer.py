@@ -218,7 +218,7 @@ if __name__ == '__main__':
         optimizer={
             'algorithm': hyperparams['optimizer']['algorithm'],
             'body': optimizer,
-            'scheduler': lr_scheduler
+            'scheduler': lr_scheduler,
         },
         hyperparams=hyperparams,
         stats={
@@ -256,6 +256,10 @@ if __name__ == '__main__':
             residual_sparsity: {
                 'inputs' : ['input', 'reconstruction', 'batch_size'],
                 'outputs': ['residual_sparsity'],
+            },
+            varloss: {
+                'inputs': ['mu'],
+                'outputs': ['varloss'],
             },
             ## If the key is a metric name:
             ## Then define the inputs, the function,

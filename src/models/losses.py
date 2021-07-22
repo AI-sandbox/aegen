@@ -40,3 +40,11 @@ def L1loss(x, o, partial=True, proportion=True):
         return loss.item(), loss_zeros, loss_ones, compression_ratio
     
     return loss.item() if not proportion else loss.item() / (x.shape[0] * x.shape[1]) * 100
+
+## OPTIONAL: extra loss for training (optimizing). 
+## Only available for window-based autoencoders.
+## Enforces the embedding to be "similar" (not so variable)
+## accross windows. Heuristic to compress better.
+def varloss(z, backward=False):
+    var_loss = z.var(axis=1).sum() / z.shape[0] 
+    return var_loss if backward else var_loss.item()
