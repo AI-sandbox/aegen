@@ -36,7 +36,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         log.info('Setting environ variable ...')
         os.environ["WANDB_START_METHOD"] = "thread"
         wandb.init(
-            project='AEgen',
+            project='AEgen_v2',
             dir=os.path.join(os.environ.get('OUT_PATH'), f'experiments/'),
             # resume='allow',
         )

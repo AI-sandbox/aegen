@@ -565,6 +565,7 @@ class aegen(nn.Module):
         if (self.shape == 'window-based') and (self.window_cloning is None):
             raise Exception('[ERROR] Window cloning is not defined using window-based shape.')
         ## Latent space distrubution can be:
+        ## - None: regular AE.
         ## - Gaussian: regular VAE.
         ## - Multi-Bernoulli: LBAE. http://proceedings.mlr.press/v119/fajtl20a/fajtl20a.pdf
         ## - Uniform: VQ-VAE.
@@ -633,12 +634,16 @@ class aegen(nn.Module):
     # def sample(self, )
 
     def forward(self, x, c=None):
+        ## Regular Autoencoder.
+        if self.latent_distribution == None:
+            z = self.encoder(x, c)
+            o = self.decoder(z, c) 
         ## VAE encoder outputs 2 feature maps:
         ## - Mu feature.
         ## - Logvar feature.
         ## These 2 feature maps are reparametrized
         ## to yield z - the latent factors' vector.
-        if self.latent_distribution == 'Gaussian':
+        elif self.latent_distribution == 'Gaussian':
             z_mu, z_logvar = self.encoder(x, c)
             z = self.reparametrize(z_mu, z_logvar)
             o = self.decoder(z, c)
