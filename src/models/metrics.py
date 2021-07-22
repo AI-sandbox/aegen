@@ -59,31 +59,112 @@ def elem_tsize(x):
 def clen(x, typesize, algorithm, shuffle=blosc.BITSHUFFLE):
     return len(blosc.compress(x, typesize=typesize, cname=algorithm, shuffle=shuffle))
 
+def metacompressor_metric(x, z, r, distribution=None, algorithm=None, shuffle=blosc.BITSHUFFLE, partial=None, kind='cratio'):
+    if distribution is None: raise Exception('Latent space distribution not defined.')
+    if algorithm is None: raise Exception('Compression algorithm not defined.')
+    if (shuffle is not blosc.NOSHUFFLE) or (shuffle is not blosc.BITSHUFFLE): raise Exception('Unknown shuffle.')
+    if (kind is not 'cratio') or (kind is not 'ccratio'): raise Exception('Unknown metacompressor metric kind.') 
+    
+    x, z, r = to_numpy(z, x, r, distribution=distribution)
+    xbin, zbin, recbin = to_binary(x, z, r)
+    
+    if kind == 'cratio':
+        clen_zbin, clen_recbin = clen(zbin, elem_tsize(z), algorithm, shuffle=shuffle), clen(recbin, elem_tsize(r), algorithm, shuffle=shuffle)
+        if partial is not None: raise Exception('Not implemented.')
+        else: len(xbin) / (clen_zbin + clen_recbin)
+    elif kind == 'ccratio':
+        clen_xbin, clen_zbin, clen_recbin = clen(xbin, elem_tsize(x), algorithm, shuffle=shuffle), clen(zbin, elem_tsize(z), algorithm, shuffle=shuffle), clen(recbin, elem_tsize(r), algorithm, shuffle=shuffle)
+        if partial is None:        return clen_xbin / (clen_zbin + clen_recbin)
+        if partial == 'embedding': return clen_xbin / clen_zbin
+        if partial == 'residual':  return clen_xbin / clen_recbin
+        if partial is not None:    raise Exception('Not implemented.')
+    else: raise Exception('Unknown kind.')
+
 ## Ratio between (original x size) vs (compressed latent representation + compressed residual).
 ## Computes the compression ratio of the system.
 ## Above 1 is good.
-def metacompressor_metric(x, z, r, distribution=None, algorithm=None):
-    if distribution is None: raise Exception('Latent space distribution not defined.')
-    if algorithm is None: raise Exception('Compression algorithm not defined.')
-    
-    x, z, r = to_numpy(z, x, r, distribution=distribution)
-    xbin, zbin, recbin = to_binary(x, z, r)  
-    clen_zbin, clen_recbin = clen(zbin, elem_tsize(z), algorithm), clen(recbin, elem_tsize(r), algorithm)
-    
-    return len(xbin) / (clen_zbin + clen_recbin)
+def cratio_no_shuffle(x, z, r, distribution=None, algorithm=None):
+    return metacompressor_metric(
+        x, z, r, 
+        distribution=distribution, 
+        algorithm=algorithm, 
+        shuffle=blosc.NOSHUFFLE, 
+        partial=None, 
+        kind='cratio'
+    )
+
+def cratio_bitshuffle(x, z, r, distribution=None, algorithm=None):
+    return metacompressor_metric(
+        x, z, r, 
+        distribution=distribution, 
+        algorithm=algorithm, 
+        shuffle=blosc.BITSHUFFLE, 
+        partial=None, 
+        kind='cratio'
+    )
 
 ## Ratio between (compressed x size) vs (compressed latent representation + compressed residual).
 ## Computes the improvement of the compression ratio over the compression algorithm.
 ## Above 1 is good.
-def metacompressor_metric_compressed(x, z, r, distribution=None, algorithm=None):
-    if distribution is None: raise Exception('Latent space distribution not defined.')
-    if algorithm is None: raise Exception('Compression algorithm not defined.')
-    
-    x, z, r = to_numpy(z, x, r, distribution=distribution)
-    xbin, zbin, recbin = to_binary(x, z, r)  
-    clen_xbin, clen_zbin, clen_recbin = clen(xbin, elem_tsize(x), algorithm), clen(zbin, elem_tsize(z), algorithm), clen(recbin, elem_tsize(r), algorithm)
-    
-    return clen_xbin / (clen_zbin + clen_recbin)
+def ccratio_no_shuffle(x, z, r, distribution=None, algorithm=None):
+    return metacompressor_metric(
+        x, z, r, 
+        distribution=distribution, 
+        algorithm=algorithm, 
+        shuffle=blosc.NOSHUFFLE, 
+        partial=None, 
+        kind='ccratio'
+    )
+
+def ccratio_bitshuffle(x, z, r, distribution=None, algorithm=None):
+    return metacompressor_metric(
+        x, z, r, 
+        distribution=distribution, 
+        algorithm=algorithm, 
+        shuffle=blosc.BITSHUFFLE, 
+        partial=None, 
+        kind='ccratio'
+    )
+
+def partial_embedding_ccratio_no_shuffle(x, z, r, distribution=None, algorithm=None):
+    return metacompressor_metric(
+        x, z, r, 
+        distribution=distribution, 
+        algorithm=algorithm, 
+        shuffle=blosc.NOSHUFFLE, 
+        partial='embedding', 
+        kind='ccratio'
+    )
+
+def partial_residual_ccratio_no_shuffle(x, z, r, distribution=None, algorithm=None):
+    return metacompressor_metric(
+        x, z, r, 
+        distribution=distribution, 
+        algorithm=algorithm, 
+        shuffle=blosc.NOSHUFFLE, 
+        partial='residual', 
+        kind='ccratio'
+    )
+
+def partial_embedding_ccratio_bitshuffle(x, z, r, distribution=None, algorithm=None):
+    return metacompressor_metric(
+        x, z, r, 
+        distribution=distribution, 
+        algorithm=algorithm, 
+        shuffle=blosc.BITSHUFFLE, 
+        partial='embedding', 
+        kind='ccratio'
+    )
+
+def partial_residual_ccratio_bitshuffle(x, z, r, distribution=None, algorithm=None):
+    return metacompressor_metric(
+        x, z, r, 
+        distribution=distribution, 
+        algorithm=algorithm, 
+        shuffle=blosc.BITSHUFFLE, 
+        partial='residual', 
+        kind='ccratio'
+    )
 
 ## Computes L1 loss between input and rexonstruction
 ## to quantify the sparsity of the residual vector.

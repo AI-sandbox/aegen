@@ -14,7 +14,7 @@ from parser import create_parser
 
 from models.aegen import aegen
 from models.losses import aeloss, L1loss
-from models.metrics import metacompressor_metric, metacompressor_metric_compressed, residual_sparsity
+from models.metrics import *
 
 from utils.loader import loader 
 from utils.loggers import system_info
@@ -260,14 +260,49 @@ if __name__ == '__main__':
             ## If the key is a metric name:
             ## Then define the inputs, the function,
             ## and the hyperparameters for the function.
-            'compression_ratio' : {
+            'cratio_no_shuffle' : {
                 'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': metacompressor_metric,
+                'function': cratio_no_shuffle,
                 'params' : ['lz4', 'zlib', 'zstd']
             },
-            'compressed_compression_ratio' : {
+            'cratio_bitshuffle' : {
                 'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': metacompressor_metric_compressed,
+                'function': cratio_bitshuffle,
+                'params' : ['lz4', 'zlib', 'zstd']
+            },
+            'ccratio_no_shuffle' : {
+                'inputs' : ['input', 'mu', 'residual', 'distribution'],
+                'function': ccratio_no_shuffle,
+                'params' : ['lz4', 'zlib', 'zstd']
+            },
+            'cratio_bitshuffle' : {
+                'inputs' : ['input', 'mu', 'residual', 'distribution'],
+                'function': cratio_bitshuffle,
+                'params' : ['lz4', 'zlib', 'zstd']
+            },
+            'ccratio_bitshuffle' : {
+                'inputs' : ['input', 'mu', 'residual', 'distribution'],
+                'function': ccratio_bitshuffle,
+                'params' : ['lz4', 'zlib', 'zstd']
+            },
+            'partial_embedding_ccratio_no_shuffle' : {
+                'inputs' : ['input', 'mu', 'residual', 'distribution'],
+                'function': partial_embedding_ccratio_no_shuffle,
+                'params' : ['lz4', 'zlib', 'zstd']
+            },
+            'partial_residual_ccratio_no_shuffle' : {
+                'inputs' : ['input', 'mu', 'residual', 'distribution'],
+                'function': partial_residual_ccratio_no_shuffle,
+                'params' : ['lz4', 'zlib', 'zstd']
+            },
+            'partial_embedding_ccratio_bitshuffle' : {
+                'inputs' : ['input', 'mu', 'residual', 'distribution'],
+                'function': partial_embedding_ccratio_bitshuffle,
+                'params' : ['lz4', 'zlib', 'zstd']
+            },
+            'partial_residual_ccratio_bitshuffle' : {
+                'inputs' : ['input', 'mu', 'residual', 'distribution'],
+                'function': partial_residual_ccratio_bitshuffle,
                 'params' : ['lz4', 'zlib', 'zstd']
             },
         }
