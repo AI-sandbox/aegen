@@ -62,8 +62,8 @@ def clen(x, typesize, algorithm, shuffle=blosc.BITSHUFFLE):
 def metacompressor_metric(x, z, r, distribution=None, algorithm=None, shuffle=blosc.BITSHUFFLE, partial=None, kind='cratio'):
     if distribution is None: raise Exception('Latent space distribution not defined.')
     if algorithm is None: raise Exception('Compression algorithm not defined.')
-    if (shuffle is not blosc.NOSHUFFLE) or (shuffle is not blosc.BITSHUFFLE): raise Exception('Unknown shuffle.')
-    if (kind is not 'cratio') or (kind is not 'ccratio'): raise Exception('Unknown metacompressor metric kind.') 
+    if (shuffle is not blosc.NOSHUFFLE) and (shuffle is not blosc.BITSHUFFLE): raise Exception('Unknown shuffle.')
+    if (kind is not 'cratio') and (kind is not 'ccratio'): raise Exception('Unknown metacompressor metric kind.') 
     
     x, z, r = to_numpy(z, x, r, distribution=distribution)
     xbin, zbin, recbin = to_binary(x, z, r)
