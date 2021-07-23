@@ -109,8 +109,9 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                     mu = torch.cat(mu, axis=-1)
                     logvar = torch.cat(logvar, axis=-1)
             else: 
-                z = model['body'].encoder(snps_array, labels)
-                z = mu = model['body'].quantizer(z)
+                z = mu = model['body'].encoder(snps_array, labels)
+                if (model['distribution'] == 'Multi-Bernoulli') or (model['distribution'] == 'Uniform'):
+                    z = mu = model['body'].quantizer(z)
             snps_reconstruction = model['body'].decoder(z, labels)
             input_mapper = {
                 'input' : snps_array.bool(),
@@ -322,7 +323,8 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
                     logvar = torch.cat(logvar, axis=-1)
             else: 
                 z = model['body'].encoder(snps_array, labels)
-                z = mu = model['body'].quantizer(z)
+                if (model['distribution'] == 'Multi-Bernoulli') or (model['distribution'] == 'Uniform'):
+                    z = mu = model['body'].quantizer(z)
             snps_reconstruction = model['body'].decoder(z, labels)
             input_mapper = {
                 'input' : snps_array.bool(),

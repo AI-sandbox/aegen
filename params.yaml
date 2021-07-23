@@ -5,16 +5,16 @@ model:
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
-  window_size: 128
+  window_size: 100
   ## If [window-based] define window_cloning, otherwise leave it null.
   window_cloning: false
-  ## Distribution can be: [Gaussian, Multi-Bernoulli, Uniform].
-  distribution: Multi-Bernoulli
+  ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
+  distribution: Unknown
   ## If distribution is [Uniform] define codebook_size.
   codebook_size: 25
   ## If model is conditioned define number of classes.
   conditioning:
-      using: true
+      using: false
       num_classes: 7
   ## If denoising mode is turned on.
   denoising:
@@ -28,17 +28,17 @@ model:
   ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 317408
+      size: 80000
       dropout: 0
       normalize: true
       activation: ReLU
     layer1:
-      size: 128
+      size: 50
       dropout: 0
       normalize: true
       activation: Tanh
     layer2: 
-      size: 128
+      size: 2
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -47,22 +47,22 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 128
+      size: 2
       dropout: 0
       normalize: true
       activation: ReLU
-    layer0:
-      size: 128
+    layer1:
+      size: 50
       dropout: 0
       normalize: true
       activation: Sigmoid
-    layer1:
-      size: 317408
+    layer2:
+      size: 80000
 
 ## Hyperparameters for training.
 hyperparams:
   epochs: 2000
-  batch_size: 128
+  batch_size: 64
   loss:
       ## Variational beta.
       beta: 1,
@@ -87,8 +87,8 @@ hyperparams:
   ## In [offline] simulation [n_batches, device, mode] are neglected.
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
-       simulation: online
-       n_batches: 20
+       simulation: offline
+       n_batches: 2
        device: cpu
        mode: uniform
        balanced: true

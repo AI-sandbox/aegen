@@ -13,7 +13,7 @@ import torch.nn as nn
 from parser import create_parser
 
 from models.aegen import aegen
-from models.losses import aeloss, L1loss
+from models.losses import *
 from models.metrics import *
 
 from utils.loader import loader 
@@ -200,8 +200,9 @@ if __name__ == '__main__':
     else: lr_scheduler = None
     log.info('Scheduler ready ++')
     #======================== Start training ========================#
-    log.info('Starting training...')
     system_info()
+    log.info(summary)
+    log.info('Starting training...')
     train(
         model={
             'architecture': model_params['shape'] + (' AE' if not model_params['conditioning']['using'] else ' C-AE'),

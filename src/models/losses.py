@@ -3,9 +3,9 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def aeloss(x, o, mu, logvar=None, beta=1, backward=False):
+def aeloss(x, o, mu, logvar=None, beta=1, backward=False, reduction='sum'):
     x, o, mu = x.float(), o.float(), mu.float()
-    loss = F.binary_cross_entropy(o, x, reduction='sum')
+    loss = F.binary_cross_entropy(o, x, reduction=reduction)
     if logvar is not None:
         KL_divergence = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         if backward:
@@ -45,6 +45,8 @@ def L1loss(x, o, partial=True, proportion=True):
 ## Only available for window-based autoencoders.
 ## Enforces the embedding to be "similar" (not so variable)
 ## accross windows. Heuristic to compress better.
-def varloss(z, backward=False):
-    var_loss = z.var(axis=1).sum() / z.shape[0] 
-    return var_loss if backward else var_loss.item()
+def varloss(z, backward=False, reduction='sum'):
+    z = z.float()
+    var_loss = z.var(axis=1).sum() 
+    if reduction == 'mean': var_loss /= z.shape[0] 
+    return var_loss if backward else [var_loss.item()]

@@ -635,7 +635,7 @@ class aegen(nn.Module):
 
     def forward(self, x, c=None):
         ## Regular Autoencoder.
-        if self.latent_distribution == None:
+        if self.latent_distribution == 'Unknown':
             z = self.encoder(x, c)
             o = self.decoder(z, c) 
         ## VAE encoder outputs 2 feature maps:
