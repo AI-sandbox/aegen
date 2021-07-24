@@ -207,6 +207,9 @@ if __name__ == '__main__':
         model={
             'architecture': model_params['shape'] + (' AE' if not model_params['conditioning']['using'] else ' C-AE'),
             'shape':model_params['shape'],
+            'isize':model_params['encoder']['layer0']['size'],
+            'bsize':model_params['decoder']['layer0']['size'],
+            'window_size': model_params['window_size'] if model_params['shape'] == 'window-based' else None,
             'distribution': model_params['distribution'],
             'body': model, 
             'parallel': model_parallel,

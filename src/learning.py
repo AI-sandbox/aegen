@@ -35,9 +35,25 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         system_info()
         log.info('Setting environ variable ...')
         os.environ["WANDB_START_METHOD"] = "thread"
+        
+        ## Automate tag creation on run launch:
+        wandb_tags = []
+        ## Filter by latent space distribution --
+        wandb_tags.append(model['distribution'])
+        ## Filter by conditioning --
+        if model['conditional']: wandb_tags.append('conditional')
+        ## Filter by window size if window-based --
+        if model['shape'] == 'window-based':
+            if model['window_size'] <= 1000: wandb_tags.append('small wsize')
+            else: wandb_tags.append('large wsize')
+            ## Filter by bottleneck size --
+            if model['bsize']*model['isize']//model['window_size'] < 256: wandb_tags.append('small bsize')
+            else: wandb_tags.append('large bsize')
+        
         wandb.init(
             project='AEgen_v2',
             dir=os.path.join(os.environ.get('OUT_PATH'), f'experiments/'),
+            tags=wandb_tags,
             # resume='allow',
         )
         wandb.run.name = summary
@@ -98,7 +114,8 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 labels = batch[1].to(device) if model['conditional'] else None
             else: 
                 snps_array, labels = online_simulator.simulate()
-                snps_array, labels = snps_array.to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
+                ## TODO: change metadata to isize from model...
+                snps_array, labels = snps_array[:, :metadata['vd_metadata']['n_snps']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
                 labels = labels if model['conditional'] else None
             
             ## Forward inputs through net.
@@ -134,14 +151,14 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                     for name, val in zip(meta['outputs'],kmetric(*inputs)):
                         epoch_metrics[f'aux_{name}'].append(val)
                 else:
-                    for p in meta['params']:
-                        inputs = []
-                        for var in meta['inputs']:
-                            try: inputs.append(input_mapper[var]) 
-                            except KeyError: pass 
-                        inputs.append(p)
-                        epoch_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
-            
+                    if i == 0:
+                        for p in meta['params']:
+                            inputs = []
+                            for var in meta['inputs']:
+                                try: inputs.append(input_mapper[var]) 
+                                except KeyError: pass 
+                            inputs.append(p)
+                            epoch_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
             # Backpropagation.
             optimizer['body'].zero_grad()
             
@@ -322,7 +339,7 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
                     mu = torch.cat(mu, axis=-1)
                     logvar = torch.cat(logvar, axis=-1)
             else: 
-                z = model['body'].encoder(snps_array, labels)
+                z = mu = model['body'].encoder(snps_array, labels)
                 if (model['distribution'] == 'Multi-Bernoulli') or (model['distribution'] == 'Uniform'):
                     z = mu = model['body'].quantizer(z)
             snps_reconstruction = model['body'].decoder(z, labels)
@@ -347,13 +364,14 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
                     for name, val in zip(meta['outputs'],kmetric(*inputs)):
                         aux_vd_metrics[f'aux_{name}'].append(val)
                 else:
-                    for p in meta['params']:
-                        inputs = []
-                        for var in meta['inputs']:
-                            try: inputs.append(input_mapper[var]) 
-                            except KeyError: pass 
-                        inputs.append(p)
-                        aux_vd_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
+                    if i == 0:
+                        for p in meta['params']:
+                            inputs = []
+                            for var in meta['inputs']:
+                                try: inputs.append(input_mapper[var]) 
+                                except KeyError: pass 
+                            inputs.append(p)
+                            aux_vd_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
             
             del snps_array
             del labels

@@ -65,13 +65,13 @@ def metacompressor_metric(x, z, r, distribution=None, algorithm=None, shuffle=bl
     if (shuffle is not blosc.NOSHUFFLE) and (shuffle is not blosc.BITSHUFFLE): raise Exception('Unknown shuffle.')
     if (kind is not 'cratio') and (kind is not 'ccratio'): raise Exception('Unknown metacompressor metric kind.') 
     
-    x, z, r = to_numpy(z, x, r, distribution=distribution)
+    x, z, r = to_numpy(x, z, r, distribution=distribution)
     xbin, zbin, recbin = to_binary(x, z, r)
     
     if kind == 'cratio':
         clen_zbin, clen_recbin = clen(zbin, elem_tsize(z), algorithm, shuffle=shuffle), clen(recbin, elem_tsize(r), algorithm, shuffle=shuffle)
         if partial is not None: raise Exception('Not implemented.')
-        else: len(xbin) / (clen_zbin + clen_recbin)
+        else: return len(xbin) / (clen_zbin + clen_recbin)
     elif kind == 'ccratio':
         clen_xbin, clen_zbin, clen_recbin = clen(xbin, elem_tsize(x), algorithm, shuffle=shuffle), clen(zbin, elem_tsize(z), algorithm, shuffle=shuffle), clen(recbin, elem_tsize(r), algorithm, shuffle=shuffle)
         if partial is None:        return clen_xbin / (clen_zbin + clen_recbin)

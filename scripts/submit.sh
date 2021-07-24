@@ -29,7 +29,7 @@ sbatch <<EOT
 #SBATCH -c 4
 #SBATCH -G 1
 #SBATCH --mem=100G
-#SBATCH --time=2-00:00
+#SBATCH --time=1-00:00
 #SBATCH -o $OUT_PATH/experiments/exp$experiment/exp$experiment.log
 #SBATCH -e $OUT_PATH/experiments/exp$experiment/exp$experiment.err
 
