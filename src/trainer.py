@@ -210,6 +210,7 @@ if __name__ == '__main__':
             'isize':model_params['encoder']['layer0']['size'],
             'bsize':model_params['decoder']['layer0']['size'],
             'window_size': model_params['window_size'] if model_params['shape'] == 'window-based' else None,
+            'window_cloning': model_params['window_cloning'] if model_params['shape'] == 'window-based' else None,
             'distribution': model_params['distribution'],
             'body': model, 
             'parallel': model_parallel,

@@ -42,13 +42,18 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         wandb_tags.append(model['distribution'])
         ## Filter by conditioning --
         if model['conditional']: wandb_tags.append('conditional')
-        ## Filter by window size if window-based --
+        ## Filter by shape
         if model['shape'] == 'window-based':
+            wandb_tags.append('window-based')
+            ## Filter by window size if window-based --
             if model['window_size'] <= 1000: wandb_tags.append('small wsize')
             else: wandb_tags.append('large wsize')
             ## Filter by bottleneck size --
             if model['bsize']*model['isize']//model['window_size'] < 256: wandb_tags.append('small bsize')
             else: wandb_tags.append('large bsize')
+            ## Filter by window cloning --
+            if model['window_cloning']: wandb_tags.append('cloning')
+        else: wandb_tags.append(model['shape'])
         
         wandb.init(
             project='AEgen_v2',
@@ -246,6 +251,13 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 num=num, 
                 state={
                     'architecture': model['architecture'],
+                    'shape':model['shape'],
+                    'isize':model['isize'],
+                    'bsize':model['bsize'],
+                    'window_size': model['window_size'],
+                    'distribution': model['distribution'],
+                    'conditional': model['conditional'],
+                    'num_classes': model['num_classes'],
                     'imputation': model['imputation'],
                     'parallel': model['parallel'],
                     'num_params': model['num_params'],
