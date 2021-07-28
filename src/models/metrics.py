@@ -173,11 +173,3 @@ def residual_sparsity(x, xhat, batch_size=None):
     x, xhat = x.float().cpu().detach(), xhat.float().cpu().detach()
     return [abs(x - xhat).sum().item() // batch_size]
     
-    
-    
-    
-    
-    
-    
-    
-    

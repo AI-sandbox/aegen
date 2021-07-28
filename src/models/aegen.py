@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
+from functional import *
 
 class FullyConnected(nn.Module):
     def __init__(self, input, output, dropout=0, normalize=True, activation=None):
@@ -314,10 +315,34 @@ class Encoder(nn.Module):
         else: raise Exception('Unknown shape.')
         
 class Quantizer(nn.Module):
-    def __init__(self, latent_distribution, params, shape='global', codebook = None, window_size=None, n_windows=None):
+    def __init__(self, latent_distribution, params, quantization, shape='global', window_size=None, n_windows=None):
         super().__init__()
         self.latent_distribution = latent_distribution
-        self.codebook = codebook
+        
+        if self.latent_distribution == 'Uniform':
+            if codebook_size is None: raise Exception('[ERROR] Undefined number of embeddings.')
+            self.num_embeddings = quantization['codebook_size']
+            self.embedding_dim = params['layer0']['size']
+            self.codebook = nn.Embedding(self.num_embeddings, self.embedding_dim)
+            
+            if quantization['multi_head']['using']:
+                if quantization['multi_head']['kind'] == 'convolutional':
+                    features = quantization['multi_head']['features']
+                    if features % 3 != 0: raise Exception('[ERROR] Number of features not divisible by 3.')
+                    else:
+                        conv3 = nn.Conv1d(1, features // 3, 3, 1, padding=optimal_padding(self.embedding_dim, 3))
+                        conv5 = nn.Conv1d(1, features // 3, 5, 1, padding=optimal_padding(self.embedding_dim, 5))
+                        conv7 = nn.Conv1d(1, features // 3, 7, 1, padding=optimal_padding(self.embedding_dim, 7))
+                else: raise Exception('[ERROR] Only convolutional features are available.')
+            else: print('[WARNING] Using only 1 features in VQ quantizer.')
+            #self.codebook = nn.Parameter(
+            #    torch.bernoulli(
+            #        torch.empty(
+            #            params['codebook_size'], params['decoder']['layer0']['size']
+            #        ).uniform_(0, 1)
+            #    ), requires_grad = True
+            #)
+            
         self.shape = shape
         ## Define the depth of the network.
         depth = len(params.keys()) - 1
@@ -341,17 +366,17 @@ class Quantizer(nn.Module):
         self.split_size = params['layer0']['size']
         
     def _return_code(self, ze):
-        if ze.size(-1) != self.codebook.size(-1):
+        if ze.shape[-1] != self.codebook.weight.shape[-1]:
             raise RuntimeError(
-                f'[Error] Invalid argument: ze.size(-1) ({ze.size(-1)}) must \
-                be equal to self.codebook.size(-1) ({self.codebook.size(-1)})'
+                f'[Error] Invalid argument: ze.shape[-1] ({ze.shape[-1]}) must \
+                be equal to self.codebook.weight.shape[-1] ({self.codebook.weight.shape[-1]})'
             )
         sq_norm = (torch.sum(ze**2, dim = -1, keepdim = True) 
-                + torch.sum(self.codebook**2, dim = 1)
-                - 2 * torch.matmul(ze, self.codebook.t()))
+                + torch.sum(self.codebook.weight**2, dim = 1)
+                - 2 * torch.matmul(ze, self.codebook.weight.t()))
         _, argmin = sq_norm.min(-1)
         zq = self.codebook.index_select(0, argmin.view(-1)).view(ze.shape)
-        return zq
+        return argmin, zq
          
     def forward(self, ze):
         ## In Multi-Bernoulli LS, the quantizer
@@ -365,13 +390,39 @@ class Quantizer(nn.Module):
         ## codebook vectors and takes the argmin.
         elif self.latent_distribution == 'Uniform':
             if self.shape == 'window-based':
-                zq = []
+                indices, zq = [], []
                 for w in range(self.n_windows):
                     ze_windowed = ze[..., w * self.split_size: (w + 1) * self.split_size]
-                    zq.append(self._return_code(ze_windowed))
+                    ## Convolutional multi-head
+                    if quantization['multi_head']['using'] and (quantization['multi_head']['kind'] == 'convolutional'):
+                        ze_windowed = ze_windowed.unsqueeze(1)
+                        ze_windowed = torch.cat([conv3(ze_windowed), conv5(ze_windowed), conv7(ze_windowed)], axis=1)
+                    idx_windowed, zq_windowed = self._return_code(ze_windowed)
+                    idxs.append(idx_windowed)
+                    zq.append(zq_windowed)
+                idxs = torch.cat(idxs, axis=-1)
                 zq = torch.cat(zq, axis=-1)
-            else: zq = self._return_code(ze)
-        return zq
+            else: 
+                ## Convolutional multi-head
+                if quantization['multi_head']['using'] and (quantization['multi_head']['kind'] == 'convolutional'):
+                    ze = ze.unsqueeze(1)
+                    ze = torch.cat([conv3(ze), conv5(ze), conv7(ze)], axis=1)
+                indices, zq = self._return_code(ze)
+            
+            # The VQ objective uses the l2 error to move the embedding vectors 
+            # ei towards the encoder outputs ze(x)
+            vq_e_loss = torch.mean((zq - ze.detach()) ** 2)
+            # Commitment loss
+            vq_commit_loss = torch.mean((zq.detach() - ze)**2) 
+
+            probs = torch.zeros(self.num_embeddings)
+            unique, counts = np.unique(indices, return_counts=True)
+            for i, c in zip(unique, counts): probs[i] = c.astype(float)/10
+            perplexity = torch.exp(-torch.sum(probs * torch.log(probs + 1e-10)))
+            
+            return indices, zq, vq_e_loss, vq_commit_loss, perplexity
+            
+        else: return zq
     
     def backward(self, grad_zq):
         ## Clone decoder gradients to encoder.
@@ -597,18 +648,11 @@ class aegen(nn.Module):
         ## Optionally: a quantizer.
         ## - Latent distribution.
         ## Makes the latent space discrete.
-        self.codebook = nn.Parameter(
-            torch.bernoulli(
-                torch.empty(
-                    params['codebook_size'], params['decoder']['layer0']['size']
-                ).uniform_(0, 1)
-            ), requires_grad = True
-        ) if self.latent_distribution == 'Uniform' else None
         self.quantizer = Quantizer(
-            latent_distribution = self.latent_distribution,
-            codebook = self.codebook, 
-            shape = self.shape, 
-            params = params['decoder'],
+            latent_distribution=self.latent_distribution, 
+            shape=self.shape, 
+            params=params['decoder'],
+            quantization=params['quantization'],
             window_size=self.window_size,
             n_windows=self.n_windows
         )
