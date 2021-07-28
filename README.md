@@ -9,7 +9,7 @@ Autoencoders for genomic data compression, classification, imputation, phasing a
 ### Environment setup
 Assuming a Python virtual environment is set up, the dependencies can be installed with:
 ```console
-foo@bar:~$ pip3 install -r requirements.txt
+$ pip3 install -r requirements.txt
 ```
 The whole project has been developed with Python 3.6.1 and PyTorch 1.4.0.
 
@@ -55,28 +55,28 @@ set, several datasets have been simulated with the corresponding subset of found
 
 In order to run the offline simulation, execute the following commands:
 ```console
-foo@bar:~$ cd scripts
-foo@bar:~$ source ini.sh
+$ cd scripts
+$ source ini.sh
 ## Create single-ancestry maps and simulate single-ancestry individuals within each split.
-foo@bar:~$ ./simulate.sh species=human generations=[desired num of generations] individuals=[desired num of ind/gen]
+$ ./simulate.sh species=human generations=[desired num of generations] individuals=[desired num of ind/gen]
 ## Create HDF5 datasets for each split with the specified number of SNPs.
-foo@bar:~$ ./create.sh snps=[desired num snps]
+$ ./create.sh snps=[desired num snps]
 ```
 
 ## Training
 The proposed method consists of a highly-adaptable and modular autoencoder that accepts flags to switch to conditioning mode, use different encoder/decoder architectures and specifiy the distribution at the bottleneck of the model. Furthermore, the model accepts two sets: (1) **a set of fixed parameters**, which defines the shape of the network, conditioning, number and size of layers in the encoder/decoder, dropouts, batch normalization and activation functions; (2) **a set of hyperparameters**, which defines optimizer flags and values, such as, the learning rate, weight decay, data augmentation simulation mode, among others. All of those parameters and hyperparameters are defined in the `params.yaml` file in the root folder of this repository. Once both sets have been specifies, a training session can be started by using:
 ```console
-foo@bar:~$ cd scripts
-foo@bar:~$ source ini.sh
+$ cd scripts
+$ source ini.sh
 
 ## Store the params.yaml file used in this experiment in $OUT_PATH
-foo@bar:~$ rm -rf $OUT_PATH/experiments/exp[number]
-foo@bar:~$ mkdir -p $OUT_PATH/experiments/exp[number]
-foo@bar:~$ cp $USER_PATH/params.yaml $OUT_PATH/experiments/exp[number]/
-foo@bar:~$ touch $OUT_PATH/experiments/exp$experiment/exp[number].log
-foo@bar:~$ chmod +rwx $OUT_PATH/experiments/exp$experiment/exp[number].log
+$ rm -rf $OUT_PATH/experiments/exp[number]
+$ mkdir -p $OUT_PATH/experiments/exp[number]
+$ cp $USER_PATH/params.yaml $OUT_PATH/experiments/exp[number]/
+$ touch $OUT_PATH/experiments/exp[number]/exp[number].log
+$ chmod +rwx $OUT_PATH/experiments/exp[number]/exp[number].log
 
-foo@bar:~$ python3 $USER_PATH/src/trainer.py \
+$ python3 $USER_PATH/src/trainer.py \
 --species human \
 --chr 22 \
 --params $OUT_PATH/experiments/exp[number]/params.yaml \
