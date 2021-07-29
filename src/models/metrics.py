@@ -14,7 +14,7 @@ def create_metrics_dict(metrics, prefix='train'):
         prefix = 'vd'
     elif prefix == 'aux':
         prefix = 'aux'
-    else: raise Exception('Prefix not valid.')
+    else: raise Exception('[ERROR] Prefix not valid.')
     for kmetric, meta in metrics.items():
         if callable(kmetric):
             for name in meta['outputs']:
@@ -52,7 +52,7 @@ def elem_tsize(x):
     if x.dtype == 'bool': tsize = ctypes.sizeof(ctypes.c_bool)
     elif x.dtype == 'float': tsize = ctypes.sizeof(ctypes.c_float)
     elif x.dtype == 'int': tsize = ctypes.sizeof(ctypes.c_int)
-    else: raise Exception('Unknown datatype.')
+    else: raise Exception('[ERROR] Unknown datatype.')
     return tsize
 
 ## Compressed length in bytes.
@@ -60,24 +60,30 @@ def clen(x, typesize, algorithm, shuffle=blosc.BITSHUFFLE):
     return len(blosc.compress(x, typesize=typesize, cname=algorithm, shuffle=shuffle))
 
 def metacompressor_metric(x, z, r, distribution=None, algorithm=None, shuffle=blosc.BITSHUFFLE, partial=None, kind='cratio'):
-    if distribution is None: raise Exception('Latent space distribution not defined.')
-    if algorithm is None: raise Exception('Compression algorithm not defined.')
-    if (shuffle is not blosc.NOSHUFFLE) and (shuffle is not blosc.BITSHUFFLE): raise Exception('Unknown shuffle.')
-    if (kind is not 'cratio') and (kind is not 'ccratio'): raise Exception('Unknown metacompressor metric kind.') 
+    if distribution is None: raise Exception('[ERROR] Latent space distribution not defined.')
+    if algorithm is None: raise Exception('[ERROR] Compression algorithm not defined.')
+    if (shuffle is not blosc.NOSHUFFLE) and (shuffle is not blosc.BITSHUFFLE): raise Exception('[ERROR] Unknown shuffle.')
+    if (kind is not 'cratio') and (kind is not 'ccratio'): raise Exception('[ERROR] Unknown metacompressor metric kind.') 
     
+    ## Unpack z:
+    if model['distribution'] == 'Gaussian': z = z[0]
+    elif model['distribution'] == 'Multi-Bernoulli': pass
+    elif model['distribution'] == 'Uniform': z = z[0]
+    else: raise Exception('[ERROR] Unpack operation failed.')
+                
     x, z, r = to_numpy(x, z, r, distribution=distribution)
     xbin, zbin, recbin = to_binary(x, z, r)
     
     if kind == 'cratio':
         clen_zbin, clen_recbin = clen(zbin, elem_tsize(z), algorithm, shuffle=shuffle), clen(recbin, elem_tsize(r), algorithm, shuffle=shuffle)
-        if partial is not None: raise Exception('Not implemented.')
+        if partial is not None: raise Exception('[ERROR] Not implemented.')
         else: return len(xbin) / (clen_zbin + clen_recbin)
     elif kind == 'ccratio':
         clen_xbin, clen_zbin, clen_recbin = clen(xbin, elem_tsize(x), algorithm, shuffle=shuffle), clen(zbin, elem_tsize(z), algorithm, shuffle=shuffle), clen(recbin, elem_tsize(r), algorithm, shuffle=shuffle)
         if partial is None:        return clen_xbin / (clen_zbin + clen_recbin)
         if partial == 'embedding': return clen_xbin / clen_zbin
         if partial == 'residual':  return clen_xbin / clen_recbin
-        if partial is not None:    raise Exception('Not implemented.')
+        if partial is not None:    raise Exception('[ERROR] Not implemented.')
     else: raise Exception('Unknown kind.')
 
 ## Ratio between (original x size) vs (compressed latent representation + compressed residual).
@@ -169,7 +175,7 @@ def partial_residual_ccratio_bitshuffle(x, z, r, distribution=None, algorithm=No
 ## Computes L1 loss between input and rexonstruction
 ## to quantify the sparsity of the residual vector.
 def residual_sparsity(x, xhat, batch_size=None):
-    if batch_size is None: raise Exception('Batch size is mising.')
+    if batch_size is None: raise Exception('[ERROR] Batch size is mising.')
     x, xhat = x.float().cpu().detach(), xhat.float().cpu().detach()
     return [abs(x - xhat).sum().item() // batch_size]
     
