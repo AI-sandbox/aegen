@@ -3,18 +3,27 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def aeloss(x, o, mu, logvar=None, beta=1, backward=False, reduction='sum'):
-    x, o, mu = x.float(), o.float(), mu.float()
+def aeloss(x, o, args, distribution, beta=1, backward=False, reduction='sum'):
+    
+    x, o = x.float(), o.float()
     loss = F.binary_cross_entropy(o, x, reduction=reduction)
-    if logvar is not None:
-        KL_divergence = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        if backward:
-            return (loss +  beta * KL_divergence)
-        return (loss +  beta * KL_divergence).item(), loss.item(), KL_divergence.item()
-    else:
-        if backward:
-            return loss
+    
+    if distribution == 'Gaussian':
+        mu, logvar = args
+        mu, logvar = mu.float(), logvar.float()
+        if backward: return (loss +  beta * KL_divergence)
+        else:        return (loss +  beta * KL_divergence).item(), loss.item(), KL_divergence.item()
+    
+    elif distribution == 'Multi-Bernoulli':
+        if backward: return loss
         return loss.item(), loss.item(), 0
+    
+    elif distribution == 'Uniform':
+        _, vq_e_loss, vq_commit_loss, _, K = args
+        if backward: return (loss + vq_e_loss + beta * vq_commit_loss)
+        else:        return (loss + vq_e_loss + beta * vq_commit_loss).item(), loss.item(), np.log(K)
+
+    else: raise Exception('[ERROR] Unknown distribution.')
 
 def L1loss(x, o, partial=True, proportion=True):
     x, o = x.float(), o.float()
@@ -50,3 +59,8 @@ def varloss(z, backward=False, reduction='sum'):
     var_loss = z.var(axis=1).sum() 
     if reduction == 'mean': var_loss /= z.shape[0] 
     return var_loss if backward else [var_loss.item()]
+
+## FOR VQ-Autoencoder ONLY.
+def perplexity(args):
+    _, _, _, perplexity, _ = args
+    return [perplexity]
