@@ -270,9 +270,9 @@ if __name__ == '__main__':
         #},
     }
     if model_params['distribution'] == 'Uniform':
-        metrics[perplexity] = {
+        metrics[entropy] = {
             'inputs' : ['args'],
-            'outputs': ['perplexity']
+            'outputs': ['entropy']
         }
     #======================== Start training ========================#
     system_info()

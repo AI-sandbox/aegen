@@ -61,6 +61,6 @@ def varloss(z, backward=False, reduction='sum'):
     return var_loss if backward else [var_loss.item()]
 
 ## FOR VQ-Autoencoder ONLY.
-def perplexity(args):
-    _, _, _, perplexity, _ = args
-    return [perplexity]
+def entropy(args):
+    _, _, _, entropy, _ = args
+    return [entropy]

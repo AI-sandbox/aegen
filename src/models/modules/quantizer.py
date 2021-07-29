@@ -80,9 +80,9 @@ class Quantizer(nn.Module):
             probs = torch.zeros(self.num_embeddings)
             unique, counts = np.unique(indices.cpu().detach().numpy(), return_counts=True)
             for i, c in zip(unique, counts): probs[i] = c.astype(float)/10
-            perplexity = torch.exp(-torch.sum(probs * torch.log(probs + 1e-10)))
+            entropy = torch.sum(probs * torch.log(probs + 1e-10))
             
-            return indices, zq, vq_e_loss, vq_commit_loss, perplexity
+            return indices, zq, vq_e_loss, vq_commit_loss, entropy
             
         else: return zq
     

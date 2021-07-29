@@ -139,8 +139,8 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 snps_reconstruction = model['body'].decoder(zq, labels)
             elif model['distribution'] == 'Uniform':
                 ze = model['body'].encoder(snps_array, labels)
-                indices, zq, vq_e_loss, vq_commit_loss, perplexity = model['body'].quantizer(ze)
-                args = (indices.int(), vq_e_loss, vq_commit_loss, perplexity, model['codebook_size'])
+                indices, zq, vq_e_loss, vq_commit_loss, entropy = model['body'].quantizer(ze)
+                args = (indices.int(), vq_e_loss, vq_commit_loss, entropy, model['codebook_size'])
                 snps_reconstruction = model['body'].decoder(zq, labels)
             
             input_mapper = {
@@ -359,8 +359,8 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
                 snps_reconstruction = model['body'].decoder(zq, labels)
             elif model['distribution'] == 'Uniform':
                 ze = model['body'].encoder(snps_array, labels)
-                indices, zq, vq_e_loss, vq_commit_loss, perplexity = model['body'].quantizer(ze)
-                args = (indices.int(), vq_e_loss, vq_commit_loss, perplexity, model['codebook_size'])
+                indices, zq, vq_e_loss, vq_commit_loss, entropy = model['body'].quantizer(ze)
+                args = (indices.int(), vq_e_loss, vq_commit_loss, entropy, model['codebook_size'])
                 snps_reconstruction = model['body'].decoder(zq, labels)
             
             input_mapper = {
