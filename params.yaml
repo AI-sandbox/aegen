@@ -5,13 +5,18 @@ model:
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
-  window_size: 100
+  window_size: 2500
   ## If [window-based] define window_cloning, otherwise leave it null.
   window_cloning: false
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
-  distribution: Unknown
+  distribution: Uniform  
+  ## Definition of Quantizer:  
   ## If distribution is [Uniform] define codebook_size.
-  codebook_size: 25
+  quantizer:
+      codebook_size: 256
+      multi_head:
+          using: false
+          features: 16   
   ## If model is conditioned define number of classes.
   conditioning:
       using: false
@@ -33,12 +38,12 @@ model:
       normalize: true
       activation: ReLU
     layer1:
-      size: 50
+      size: 1250
       dropout: 0
       normalize: true
-      activation: Tanh
+      activation: null
     layer2: 
-      size: 2
+      size: 128
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -47,12 +52,12 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 2
+      size: 128
       dropout: 0
       normalize: true
       activation: ReLU
     layer1:
-      size: 50
+      size: 1250
       dropout: 0
       normalize: true
       activation: Sigmoid
@@ -62,7 +67,7 @@ model:
 ## Hyperparameters for training.
 hyperparams:
   epochs: 2000
-  batch_size: 64
+  batch_size: 512
   loss:
       ## Variational beta.
       beta: 1,
@@ -88,7 +93,7 @@ hyperparams:
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
        simulation: offline
-       n_batches: 2
+       n_batches: 5
        device: cpu
        mode: uniform
        balanced: true

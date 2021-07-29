@@ -1,9 +1,9 @@
 import torch
 import numpy as np
 import torch.nn as nn
-from modules.encoder import Encoder
-from modules.quantizer import Quantizer
-from modules.decoder import Decoder
+from models.modules.encoder import Encoder
+from models.modules.quantizer import Quantizer
+from models.modules.decoder import Decoder
 
 class aegen(nn.Module):
     def __init__(self, params, conditional=False, sample_mode=False, imputation=False):
@@ -38,7 +38,7 @@ class aegen(nn.Module):
             window_size=self.window_size,
             n_windows=self.n_windows,
             window_cloning=self.window_cloning,
-            heads=params['quantizer']['features'] if params['quantizer']['using'] else 1
+            heads=params['quantizer']['multi_head']['features'] if params['quantizer']['multi_head']['using'] else 1
         )
         ## Decoder is defined by:
         ## - Parameters: layers' definitions.
@@ -50,7 +50,7 @@ class aegen(nn.Module):
             window_size=self.window_size,
             n_windows=self.n_windows,
             window_cloning=self.window_cloning,
-            heads=params['quantizer']['features'] if params['quantizer']['using'] else 1
+            heads=params['quantizer']['multi_head']['features'] if params['quantizer']['multi_head']['using'] else 1
         ) 
         ## Optionally: a quantizer.
         ## - Latent distribution.
@@ -59,7 +59,7 @@ class aegen(nn.Module):
             latent_distribution=self.latent_distribution, 
             shape=self.shape, 
             params=params['decoder'],
-            quantization=params['quantization'],
+            quantization=params['quantizer'],
             window_size=self.window_size,
             n_windows=self.n_windows
         )
@@ -105,7 +105,7 @@ class aegen(nn.Module):
             o = self.decoder(zq, c)
         elif self.latent_distribution == 'Uniform':
             ze = self.encoder(x, c)
-            zq = self.quantizer(ze)
+            _, zq, _, _, _ = self.quantizer(ze)
             o = self.decoder(zq, c)
         ## Unknown distribution
         else: raise Exception('Unknown distribution.')

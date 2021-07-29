@@ -199,6 +199,81 @@ if __name__ == '__main__':
         else: raise Exception('Wrong definition for scheduler')
     else: lr_scheduler = None
     log.info('Scheduler ready ++')
+    #======================== Define metrics ========================#
+    metrics={
+        ## If the key is a function:
+        ## Then define the inputs and the expected outputs
+        ## of the function to store the metrics.
+        aeloss: {
+            'inputs' : ['input', 'output', 'args', 'distribution'],
+            'outputs': ['ae_loss', 'reconstruction_loss', 'KL_divergence'],
+        },
+        L1loss: {
+            'inputs' : ['input', 'reconstruction'],
+            'outputs': ['L1_loss', 'ones_reconstruction_loss', 'zeros_reconstruction_loss'],
+        },
+        residual_sparsity: {
+            'inputs' : ['input', 'reconstruction', 'batch_size'],
+            'outputs': ['residual_sparsity'],
+        },
+        #varloss: {
+        #    'inputs': ['mu'],
+        #    'outputs': ['varloss'],
+        #},
+        ## If the key is a metric name:
+        ## Then define the inputs, the function,
+        ## and the hyperparameters for the function.
+        'cratio_no_shuffle' : {
+            'inputs' : ['input', 'args', 'residual', 'distribution'],
+            'function': cratio_no_shuffle,
+            'params' : ['lz4', 'zlib', 'zstd']
+        },
+        'cratio_bitshuffle' : {
+            'inputs' : ['input', 'args', 'residual', 'distribution'],
+            'function': cratio_bitshuffle,
+            'params' : ['lz4', 'zlib', 'zstd']
+        },
+        'ccratio_no_shuffle' : {
+            'inputs' : ['input', 'args', 'residual', 'distribution'],
+            'function': ccratio_no_shuffle,
+            'params' : ['lz4', 'zlib', 'zstd']
+        },
+        'cratio_bitshuffle' : {
+            'inputs' : ['input', 'args', 'residual', 'distribution'],
+            'function': cratio_bitshuffle,
+            'params' : ['lz4', 'zlib', 'zstd']
+        },
+        'ccratio_bitshuffle' : {
+            'inputs' : ['input', 'args', 'residual', 'distribution'],
+            'function': ccratio_bitshuffle,
+            'params' : ['lz4', 'zlib', 'zstd']
+        },
+        #'partial_embedding_ccratio_no_shuffle' : {
+        #    'inputs' : ['input', 'mu', 'residual', 'distribution'],
+        #    'function': partial_embedding_ccratio_no_shuffle,
+        #    'params' : ['lz4', 'zlib', 'zstd']
+        #},
+        #'partial_residual_ccratio_no_shuffle' : {
+        #    'inputs' : ['input', 'mu', 'residual', 'distribution'],
+        #    'function': partial_residual_ccratio_no_shuffle,
+        #    'params' : ['lz4', 'zlib', 'zstd']
+        #},
+        #'partial_embedding_ccratio_bitshuffle' : {
+        #    'inputs' : ['input', 'mu', 'residual', 'distribution'],
+        #    'function': partial_embedding_ccratio_bitshuffle,
+        #    'params' : ['lz4', 'zlib', 'zstd']
+        #},
+        #'partial_residual_ccratio_bitshuffle' : {
+        #    'inputs' : ['input', 'mu', 'residual', 'distribution'],
+        #    'function': partial_residual_ccratio_bitshuffle,
+        #    'params' : ['lz4', 'zlib', 'zstd']
+        #},
+    }
+    if model_params['distribution'] == 'Uniform':
+        metrics[perplexity] = {
+            'inputs' : ['args'],
+            'outputs': ['perplexity']
+        }
     #======================== Start training ========================#
     system_info()
     log.info(summary)
@@ -211,6 +286,7 @@ if __name__ == '__main__':
             'bsize':model_params['decoder']['layer0']['size'],
             'window_size': model_params['window_size'] if model_params['shape'] == 'window-based' else None,
             'window_cloning': model_params['window_cloning'] if model_params['shape'] == 'window-based' else None,
+            'codebook_size': model_params['quantizer']['codebook_size'] if model_params['distribution'] == 'Uniform' else None, 
             'distribution': model_params['distribution'],
             'body': model, 
             'parallel': model_parallel,
@@ -246,74 +322,6 @@ if __name__ == '__main__':
         num=args.num,
         only=args.only,
         monitor='wandb',
-        metrics={
-            ## If the key is a function:
-            ## Then define the inputs and the expected outputs
-            ## of the function to store the metrics.
-            aeloss: {
-                'inputs' : ['input', 'output', 'mu', 'logvar'],
-                'outputs': ['ae_loss', 'reconstruction_loss', 'KL_divergence'],
-            },
-            L1loss: {
-                'inputs' : ['input', 'reconstruction'],
-                'outputs': ['L1_loss', 'ones_reconstruction_loss', 'zeros_reconstruction_loss'],
-            },
-            residual_sparsity: {
-                'inputs' : ['input', 'reconstruction', 'batch_size'],
-                'outputs': ['residual_sparsity'],
-            },
-            varloss: {
-                'inputs': ['mu'],
-                'outputs': ['varloss'],
-            },
-            ## If the key is a metric name:
-            ## Then define the inputs, the function,
-            ## and the hyperparameters for the function.
-            'cratio_no_shuffle' : {
-                'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': cratio_no_shuffle,
-                'params' : ['lz4', 'zlib', 'zstd']
-            },
-            'cratio_bitshuffle' : {
-                'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': cratio_bitshuffle,
-                'params' : ['lz4', 'zlib', 'zstd']
-            },
-            'ccratio_no_shuffle' : {
-                'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': ccratio_no_shuffle,
-                'params' : ['lz4', 'zlib', 'zstd']
-            },
-            'cratio_bitshuffle' : {
-                'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': cratio_bitshuffle,
-                'params' : ['lz4', 'zlib', 'zstd']
-            },
-            'ccratio_bitshuffle' : {
-                'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': ccratio_bitshuffle,
-                'params' : ['lz4', 'zlib', 'zstd']
-            },
-            'partial_embedding_ccratio_no_shuffle' : {
-                'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': partial_embedding_ccratio_no_shuffle,
-                'params' : ['lz4', 'zlib', 'zstd']
-            },
-            'partial_residual_ccratio_no_shuffle' : {
-                'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': partial_residual_ccratio_no_shuffle,
-                'params' : ['lz4', 'zlib', 'zstd']
-            },
-            'partial_embedding_ccratio_bitshuffle' : {
-                'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': partial_embedding_ccratio_bitshuffle,
-                'params' : ['lz4', 'zlib', 'zstd']
-            },
-            'partial_residual_ccratio_bitshuffle' : {
-                'inputs' : ['input', 'mu', 'residual', 'distribution'],
-                'function': partial_residual_ccratio_bitshuffle,
-                'params' : ['lz4', 'zlib', 'zstd']
-            },
-        }
+        metrics=metrics
     )
     #======================== End training ========================#

@@ -126,25 +126,32 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             ## Forward inputs through net.
             if model['distribution'] == 'Gaussian':
                 mu, logvar = model['body'].encoder(snps_array, labels)
-                z = model['body'].reparametrize(mu, logvar)
+                ze = model['body'].reparametrize(mu, logvar)
                 if model['shape'] == 'window-based':
                     mu = torch.cat(mu, axis=-1)
                     logvar = torch.cat(logvar, axis=-1)
-            else: 
-                z = mu = model['body'].encoder(snps_array, labels)
-                if (model['distribution'] == 'Multi-Bernoulli') or (model['distribution'] == 'Uniform'):
-                    z = mu = model['body'].quantizer(z)
-            snps_reconstruction = model['body'].decoder(z, labels)
+                args = (mu.float(), logvar.float())
+                snps_reconstruction = model['body'].decoder(ze, labels)
+            elif model['distribution'] == 'Multi-Bernoulli':
+                ze = model['body'].encoder(snps_array, labels)
+                zq = model['body'].quantizer(ze)
+                args = zq.bool()
+                snps_reconstruction = model['body'].decoder(zq, labels)
+            elif model['distribution'] == 'Uniform':
+                ze = model['body'].encoder(snps_array, labels)
+                indices, zq, vq_e_loss, vq_commit_loss, perplexity = model['body'].quantizer(ze)
+                args = (indices.int(), vq_e_loss, vq_commit_loss, perplexity, model['codebook_size'])
+                snps_reconstruction = model['body'].decoder(zq, labels)
+            
             input_mapper = {
                 'input' : snps_array.bool(),
                 'output': snps_reconstruction.float(),
                 'reconstruction' : (snps_reconstruction > 0.5).bool(),
                 'residual' : abs(snps_array - (snps_reconstruction > 0.5).float()).bool(),
-                'mu' : mu.float() if model['distribution'] == 'Gaussian' else mu.bool(),
+                'args' : args,
                 'distribution' : model['distribution'],
                 'batch_size' : int(snps_array.shape[0]),
             }
-            if model['distribution'] == 'Gaussian': input_mapper['logvar'] = logvar
             
             ## Compute losses and metrics.
             for kmetric, meta in metrics.items():
@@ -167,15 +174,9 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             # Backpropagation.
             optimizer['body'].zero_grad()
             
-            opt_loss = aeloss(
-                snps_array, 
-                snps_reconstruction, 
-                mu, 
-                logvar if model['distribution'] == 'Gaussian' else None, 
-                backward=True
-            )
-            if hyperparams['loss']['varloss']:
-                opt_loss += varloss(mu, backward=True)
+            opt_loss = aeloss(snps_array, snps_reconstruction, args, model['distribution'], backward=True)
+            # if hyperparams['loss']['varloss']:
+            #     opt_loss += varloss(mu, backward=True)
                 
             opt_loss.backward()
             
@@ -185,10 +186,9 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             ## Clear memory and caches.
             del snps_array
             del labels
-            del mu
-            if model['distribution'] == 'Gaussian': del logvar
-            del z
+            del args
             del snps_reconstruction
+            del input_mapper
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -346,25 +346,32 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
             ## Forward inputs through net.
             if model['distribution'] == 'Gaussian':
                 mu, logvar = model['body'].encoder(snps_array, labels)
-                z = model['body'].reparametrize(mu, logvar)
+                ze = model['body'].reparametrize(mu, logvar)
                 if model['shape'] == 'window-based':
                     mu = torch.cat(mu, axis=-1)
                     logvar = torch.cat(logvar, axis=-1)
-            else: 
-                z = mu = model['body'].encoder(snps_array, labels)
-                if (model['distribution'] == 'Multi-Bernoulli') or (model['distribution'] == 'Uniform'):
-                    z = mu = model['body'].quantizer(z)
-            snps_reconstruction = model['body'].decoder(z, labels)
+                args = (mu.float(), logvar.float())
+                snps_reconstruction = model['body'].decoder(ze, labels)
+            elif model['distribution'] == 'Multi-Bernoulli':
+                ze = model['body'].encoder(snps_array, labels)
+                zq = model['body'].quantizer(ze)
+                args = zq.bool()
+                snps_reconstruction = model['body'].decoder(zq, labels)
+            elif model['distribution'] == 'Uniform':
+                ze = model['body'].encoder(snps_array, labels)
+                indices, zq, vq_e_loss, vq_commit_loss, perplexity = model['body'].quantizer(ze)
+                args = (indices.int(), vq_e_loss, vq_commit_loss, perplexity, model['codebook_size'])
+                snps_reconstruction = model['body'].decoder(zq, labels)
+            
             input_mapper = {
                 'input' : snps_array.bool(),
                 'output': snps_reconstruction.float(),
                 'reconstruction' : (snps_reconstruction > 0.5).bool(),
                 'residual' : abs(snps_array - (snps_reconstruction > 0.5).float()).bool(),
-                'mu' : mu.float() if model['distribution'] == 'Gaussian' else mu.bool(),
+                'args' : args,
                 'distribution' : model['distribution'],
                 'batch_size' : int(snps_array.shape[0]),
             }
-            if model['distribution'] == 'Gaussian': input_mapper['logvar'] = logvar
             
             ## Compute losses and metrics.
             for kmetric, meta in metrics.items():
@@ -385,12 +392,12 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
                             inputs.append(p)
                             aux_vd_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
             
+            ## Clear memory and caches.
             del snps_array
             del labels
-            del mu
-            if model['distribution'] == 'Gaussian': del logvar
-            del z
+            del args
             del snps_reconstruction
+            del input_mapper
             gc.collect()
             torch.cuda.empty_cache()
         
