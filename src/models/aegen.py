@@ -1,9 +1,9 @@
 import torch
 import numpy as np
 import torch.nn as nn
-from encoder import *
-from quantizer import *
-from decoder import *
+from modules.encoder import Encoder
+from modules.quantizer import Quantizer
+from modules.decoder import Decoder
 
 class aegen(nn.Module):
     def __init__(self, params, conditional=False, sample_mode=False, imputation=False):
@@ -23,7 +23,7 @@ class aegen(nn.Module):
         ## Latent space distrubution can be:
         ## - None: regular AE.
         ## - Gaussian: regular VAE.
-        ## - Multi-Bernoulli: LBAE. http://proceedings.mlr.press/v119/fajtl20a/fajtl20a.pdf
+        ## - Multi-Bernoulli: LBAE.
         ## - Uniform: VQ-VAE.
         self.latent_distribution = params['distribution']
         ## Encoder is defined by:
@@ -38,6 +38,7 @@ class aegen(nn.Module):
             window_size=self.window_size,
             n_windows=self.n_windows,
             window_cloning=self.window_cloning,
+            heads=params['quantizer']['features'] if params['quantizer']['using'] else 1
         )
         ## Decoder is defined by:
         ## - Parameters: layers' definitions.
@@ -49,6 +50,7 @@ class aegen(nn.Module):
             window_size=self.window_size,
             n_windows=self.n_windows,
             window_cloning=self.window_cloning,
+            heads=params['quantizer']['features'] if params['quantizer']['using'] else 1
         ) 
         ## Optionally: a quantizer.
         ## - Latent distribution.

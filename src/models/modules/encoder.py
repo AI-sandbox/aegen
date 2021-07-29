@@ -4,7 +4,7 @@ import torch.nn as nn
 from functional import *
 
 class Encoder(nn.Module):
-    def __init__(self, latent_distribution, params, num_classes=None, shape='global', window_size=None, n_windows=None, window_cloning=None):
+    def __init__(self, latent_distribution, params, num_classes=None, shape='global', window_size=None, n_windows=None, window_cloning=None, heads=1):
         super().__init__()
         ## Define latent distribution.
         self.latent_distribution = latent_distribution
@@ -33,6 +33,12 @@ class Encoder(nn.Module):
         self.window_cloning = window_cloning
         if (self.shape == 'window-based') and (self.window_cloning is None):
             raise Exception('[ERROR] Window cloning is not defined using window-based shape.')
+            
+        ## Define multi-head if desires.
+        self.heads = heads
+        if (self.latent_distribution != 'Uniform') and self.heads > 1:
+            print('[WARNING] Multi-head for non VQ. Ignoring multi-head requirement.')
+            self.heads = 1
 
         ## Check if activations are correct.                
         if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Tanh'):
@@ -88,6 +94,7 @@ class Encoder(nn.Module):
                             if w == self.n_windows - 1:
                                 wsize += (params['layer0']['size'] % self.window_size)
                         else: wsize = params[f'layer{i}']['size']
+                        ## Append modules;
                         if self.latent_distribution == 'Gaussian':
                             modules[f'layer{i}_win{w}_mu'] = FullyConnected(
                                 input      = wsize,
@@ -103,14 +110,26 @@ class Encoder(nn.Module):
                                 normalize  = params[f'layer{i}']['normalize'],
                                 activation = params[f'layer{i}']['activation'],
                             )
-                        else: 
-                            modules[f'layer{i}_win{w}'] = FullyConnected(
-                                input      = wsize,
-                                output     = params[f'layer{i + 1}']['size'],
-                                dropout    = params[f'layer{i}']['dropout'],
-                                normalize  = params[f'layer{i}']['normalize'],
-                                activation = params[f'layer{i}']['activation'],
-                            )
+                        else:
+                            ## If multi-head, define heads in the last layer.
+                            if (self.heads > 1) and (i == depth - 1):
+                                for h in range(self.heads):
+                                    print(f'Adding layer{i}_win{w}_head{h}...')
+                                    modules[f'layer{i}_win{w}_head{h}'] = FullyConnected(
+                                        input      = wsize,
+                                        output     = params[f'layer{i + 1}']['size'],
+                                        dropout    = params[f'layer{i}']['dropout'],
+                                        normalize  = params[f'layer{i}']['normalize'],
+                                        activation = params[f'layer{i}']['activation'],
+                                    )
+                            else:
+                                modules[f'layer{i}_win{w}'] = FullyConnected(
+                                    input      = wsize,
+                                    output     = params[f'layer{i + 1}']['size'],
+                                    dropout    = params[f'layer{i}']['dropout'],
+                                    normalize  = params[f'layer{i}']['normalize'],
+                                    activation = params[f'layer{i}']['activation'],
+                                )
                 else: ## Use cloning.
                     if self.latent_distribution == 'Gaussian': raise Exception('Not implemented.')
                     else:
@@ -135,7 +154,13 @@ class Encoder(nn.Module):
                 else:
                     self.funnel = nn.ModuleList()
                     for w in range(self.n_windows):
-                        self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(depth)]))
+                        funnel_depth = depth - 1 if self.heads > 1 else depth
+                        self.funnel.append(nn.Sequential(*[modules[f'layer{i}_win{w}'] for i in range(funnel_depth)]))
+                    if self.heads > 1: 
+                        self.endheads = nn.ModuleList()
+                        for w in range(self.n_windows):
+                            for h in range(self.heads):
+                                self.endheads.append(modules[f'layer{depth - 1}_win{w}_head{h}'])
             else: ## Use cloning.
                 if self.latent_distribution == 'Gaussian': raise Exception('Not implemented.')
                 else:
@@ -215,7 +240,7 @@ class Encoder(nn.Module):
                 o_var = self.FClogvar(o)
                 return o_mu, o_var
             else: return o
-        elif self.shape == 'window-based': ## TODO: Implement conditioned window-based
+        elif self.shape == 'window-based':
             if self.latent_distribution == 'Gaussian':
                 os_mu, os_logvar = [], [] ## Stores the outputs of each window.
                 for w in range(self.n_windows):
@@ -242,8 +267,17 @@ class Encoder(nn.Module):
                     if c is not None:
                         x_windowed = torch.cat([x_windowed, c], -1)
                     ## Process each window with the corresponding funnel.
-                    if not self.window_cloning: os.append(self.funnel[w](x_windowed))
-                    else: os.append(self.funnel(x_windowed))
+                    if self.window_cloning: os.append(self.funnel(x_windowed))
+                    else: 
+                        ## If multi-head:
+                        if self.heads > 1:
+                            pre_head_windowed = self.funnel[w](x_windowed)
+                            pos_head_windowed = []
+                            for h in range(self.heads):
+                                pos_head_windowed.append(self.endheads[w + h](pre_head_windowed).unsqueeze(1))
+                            pos_head_windowed = torch.cat(pos_head_windowed, axis=1)
+                            os.append(pos_head_windowed)
+                        else: os.append(self.funnel[w](x_windowed))
                 ## Concat all outputs into a single o vector.
                 o = torch.cat(os, axis=-1)
             return o
