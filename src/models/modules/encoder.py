@@ -52,16 +52,18 @@ class Encoder(nn.Module):
             modules = []
 
             for i in range(depth - 1 if self.latent_distribution == 'Gaussian' else depth):
-                modules.append(FullyConnected(
-                    ## Only can condition input (layer0).
-                    input = (
-                        params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
-                    ) if i == 0 else params[f'layer{i}']['size'],
-                    output     = params[f'layer{i + 1}']['size'],
-                    dropout    = params[f'layer{i}']['dropout'],
-                    normalize  = params[f'layer{i}']['normalize'],
-                    activation = params[f'layer{i}']['activation'],
-                ))
+                modules.append(
+                    FullyConnected(
+                        ## Only can condition input (layer0).
+                        input = (
+                            params[f'layer{i}']['size'] if num_classes is None else (params[f'layer{i}']['size'] + num_classes)
+                        ) if i == 0 else params[f'layer{i}']['size'],
+                        output     = params[f'layer{i + 1}']['size'],
+                        dropout    = params[f'layer{i}']['dropout'],
+                        normalize  = params[f'layer{i}']['normalize'],
+                        activation = params[f'layer{i}']['activation'],
+                    )
+                )
             self.FCs = nn.Sequential(*modules)
             if self.latent_distribution == 'Gaussian':
                 self.FCmu = FullyConnected(

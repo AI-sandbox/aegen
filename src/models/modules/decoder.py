@@ -4,9 +4,9 @@ import torch.nn as nn
 from functional import *
     
 class Decoder(nn.Module):
-    def __init__(self, params, num_classes=None, shape='global', window_size=None, n_windows=None, window_cloning=None):
+    def __init__(self, params, num_classes=None, shape='global', window_size=None, n_windows=None, window_cloning=None, heads=1):
         super().__init__()
-        ## Define the shape of the Encoder.
+        ## Define the shape of the Decoder.
         self.shape = shape
         ## Define the depth of the network.
         depth = len(params.keys()) - 1
@@ -28,6 +28,9 @@ class Decoder(nn.Module):
         self.window_cloning = window_cloning
         if (self.shape == 'window-based') and (self.window_cloning is None):
             raise Exception('[ERROR] Window cloning is not defined using window-based shape.')
+            
+        ## Define multi-head if desires.
+        self.heads = heads
         
         ## Shape global modules definitions.
         if self.shape == 'global':
@@ -46,6 +49,7 @@ class Decoder(nn.Module):
                     )
                 )
             self.FCs = nn.Sequential(*modules)
+        ## Shape window-based (independent) modules definitions
         elif self.shape == 'window-based':
             modules = {}
             ## For each layer and for each window we define a FC matrix.
@@ -62,6 +66,7 @@ class Decoder(nn.Module):
                             if w == self.n_windows - 1:
                                 wsize += (params[f'layer{depth}']['size'] % self.window_size)
                         else: wsize = params[f'layer{i + 1}']['size']
+                        ## Append modules;
                         modules[f'layer{i}_win{w}'] = FullyConnected(
                             input      = zsize,
                             output     = wsize,
@@ -132,8 +137,10 @@ class Decoder(nn.Module):
                 z_windowed = z[..., w * self.split_size: (w + 1) * self.split_size]
                 if c is not None:
                     z_windowed = torch.cat([z_windowed, c], -1)
-                if not self.window_cloning: os.append(self.funnel[w](z_windowed))
-                else: os.append(self.funnel(z_windowed))
+                if self.window_cloning: os.append(self.funnel(z_windowed))
+                else: 
+                    if self.heads > 1: z_windowed = z_windowed.sum(axis=1)
+                    os.append(self.funnel[w](z_windowed))
             ## Concat all outputs into a single o vector.
             o = torch.cat(os, axis=-1)
             return o
