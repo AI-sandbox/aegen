@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
-from functional import *
+from models.modules.functional import *
 
 class Encoder(nn.Module):
     def __init__(self, latent_distribution, params, num_classes=None, shape='global', window_size=None, n_windows=None, window_cloning=None, heads=1):

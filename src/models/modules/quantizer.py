@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
-from functional import *
+from models.modules.functional import *
 
 class Quantizer(nn.Module):
     def __init__(self, latent_distribution, params, quantization, shape='global', window_size=None, n_windows=None):

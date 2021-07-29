@@ -66,9 +66,9 @@ def metacompressor_metric(x, z, r, distribution=None, algorithm=None, shuffle=bl
     if (kind is not 'cratio') and (kind is not 'ccratio'): raise Exception('[ERROR] Unknown metacompressor metric kind.') 
     
     ## Unpack z:
-    if model['distribution'] == 'Gaussian': z = z[0]
-    elif model['distribution'] == 'Multi-Bernoulli': pass
-    elif model['distribution'] == 'Uniform': z = z[0]
+    if distribution == 'Gaussian': z = z[0]
+    elif distribution == 'Multi-Bernoulli': pass
+    elif distribution == 'Uniform': z = z[0]
     else: raise Exception('[ERROR] Unpack operation failed.')
                 
     x, z, r = to_numpy(x, z, r, distribution=distribution)
