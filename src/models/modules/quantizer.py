@@ -40,22 +40,24 @@ class Quantizer(nn.Module):
             
             if self.win_independent:
                 self.codebook = nn.ModuleList()
-                for w in self.n_windows:
+                for w in range(self.n_windows):
                     self.codebook.append(nn.Embedding(self.num_embeddings, self.embedding_dim))
-            else self.codebook = nn.Embedding(self.num_embeddings, self.embedding_dim)
+            else: self.codebook = nn.Embedding(self.num_embeddings, self.embedding_dim)
             
         ## For slitting into windows the bottleneck
         self.split_size = params['layer0']['size']
         
     def _return_code(self, ze, win=None):
-        if ze.shape[-1] != self.codebook.weight.shape[-1]:
+        
+        if win is not None: 
+            codebook = self.codebook[win].weight
+        else: codebook = self.codebook.weight
+            
+        if ze.shape[-1] != codebook.shape[-1]:
             raise RuntimeError(
                 f'[Error] Invalid argument: ze.shape[-1] ({ze.shape[-1]}) must \
                 be equal to self.codebook.weight.shape[-1] ({self.codebook.weight.shape[-1]})'
             )
-            
-        if win is not None: codebook = self.codebook[win].weight
-        else: codebook = self.codebook.weight
             
         sq_norm = (torch.sum(ze**2, dim = -1, keepdim = True) 
                 + torch.sum(codebook**2, dim = 1)

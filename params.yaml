@@ -13,11 +13,11 @@ model:
   ## Definition of Quantizer:  
   ## If distribution is [Uniform] define codebook_size.
   quantizer:
-      codebook_size: 512
-      win_independent: true
+      codebook_size: 64
+      win_independent: false
       multi_head:
-          using: false
-          features: 64   
+          using: true
+          features: 8
   ## If model is conditioned define number of classes.
   conditioning:
       using: false
@@ -93,7 +93,7 @@ hyperparams:
   ## In [offline] simulation [n_batches, device, mode] are neglected.
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
-       simulation: offline
+       simulation: online
        n_batches: 5
        device: cpu
        mode: uniform
