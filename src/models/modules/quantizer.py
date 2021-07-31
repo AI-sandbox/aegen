@@ -7,12 +7,6 @@ class Quantizer(nn.Module):
     def __init__(self, latent_distribution, params, quantization, shape='global', window_size=None, n_windows=None):
         super().__init__()
         self.latent_distribution = latent_distribution
-        
-        if self.latent_distribution == 'Uniform':
-            if quantization['codebook_size'] is None: raise Exception('[ERROR] Undefined number of embeddings.')
-            self.num_embeddings = quantization['codebook_size']
-            self.embedding_dim = params['layer0']['size']
-            self.codebook = nn.Embedding(self.num_embeddings, self.embedding_dim)
             
         self.shape = shape
         ## Define the depth of the network.
@@ -33,20 +27,41 @@ class Quantizer(nn.Module):
             self.window_size = int(np.floor(params['layer0']['size'] / self.n_windows))
         else: raise Exception('Missing window_size and n_windows')
             
+        if self.latent_distribution == 'Uniform':
+            if quantization['codebook_size'] is None: raise Exception('[ERROR] Undefined number of embeddings.')
+            self.num_embeddings = quantization['codebook_size']
+            self.embedding_dim = params['layer0']['size']
+            
+            ## Determine if codebook is shared.
+            self.win_independent = quantization['win_independent']
+            if (self.shape != 'window-based') and self.win_independent:
+                print('[WARNING] Mode is not window-based. Using one codebook!')
+                self.win_independent = False
+            
+            if self.win_independent:
+                self.codebook = nn.ModuleList()
+                for w in self.n_windows:
+                    self.codebook.append(nn.Embedding(self.num_embeddings, self.embedding_dim))
+            else self.codebook = nn.Embedding(self.num_embeddings, self.embedding_dim)
+            
         ## For slitting into windows the bottleneck
         self.split_size = params['layer0']['size']
         
-    def _return_code(self, ze):
+    def _return_code(self, ze, win=None):
         if ze.shape[-1] != self.codebook.weight.shape[-1]:
             raise RuntimeError(
                 f'[Error] Invalid argument: ze.shape[-1] ({ze.shape[-1]}) must \
                 be equal to self.codebook.weight.shape[-1] ({self.codebook.weight.shape[-1]})'
             )
+            
+        if win is not None: codebook = self.codebook[win].weight
+        else: codebook = self.codebook.weight
+            
         sq_norm = (torch.sum(ze**2, dim = -1, keepdim = True) 
-                + torch.sum(self.codebook.weight**2, dim = 1)
-                - 2 * torch.matmul(ze, self.codebook.weight.t()))
+                + torch.sum(codebook**2, dim = 1)
+                - 2 * torch.matmul(ze, codebook.t()))
         _, argmin = sq_norm.min(-1)
-        zq = self.codebook.weight.index_select(0, argmin.view(-1)).view(ze.shape)
+        zq = codebook.index_select(0, argmin.view(-1)).view(ze.shape)
         return argmin, zq
          
     def forward(self, ze):
@@ -64,7 +79,7 @@ class Quantizer(nn.Module):
                 indices, zq = [], []
                 for w in range(self.n_windows):
                     ze_windowed = ze[..., w * self.split_size: (w + 1) * self.split_size]
-                    idx_windowed, zq_windowed = self._return_code(ze_windowed)
+                    idx_windowed, zq_windowed = self._return_code(ze_windowed, win=w if self.win_independent else None)
                     indices.append(idx_windowed.unsqueeze(1))
                     zq.append(zq_windowed)
                 indices = torch.cat(indices, axis=1)

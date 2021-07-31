@@ -13,10 +13,11 @@ model:
   ## Definition of Quantizer:  
   ## If distribution is [Uniform] define codebook_size.
   quantizer:
-      codebook_size: 256
+      codebook_size: 512
+      win_independent: true
       multi_head:
           using: false
-          features: 16   
+          features: 64   
   ## If model is conditioned define number of classes.
   conditioning:
       using: false
@@ -41,7 +42,7 @@ model:
       size: 1250
       dropout: 0
       normalize: true
-      activation: null
+      activation: Tanh
     layer2: 
       size: 128
   ## Architecture of Decoder:
