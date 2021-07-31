@@ -37,6 +37,7 @@ def to_numpy(x, z, r, distribution=None):
     
     x = _to_numpy(x).astype(bool)
     if distribution == 'Gaussian': z = _to_numpy(z).astype(float)
+    if distribution == 'Uniform': z = _to_numpy(z).astype(np.dtype('B'))
     else: z = _make01(_to_numpy(z)).astype(bool)
     r =  _to_numpy(r).astype(bool) 
     return x, z, r
@@ -51,6 +52,7 @@ def to_binary(x, z, r):
 def elem_tsize(x):
     if x.dtype == 'bool': tsize = ctypes.sizeof(ctypes.c_bool)
     elif x.dtype == 'float': tsize = ctypes.sizeof(ctypes.c_float)
+    elif x.dtype == 'uint8': tsize = ctypes.sizeof(ctypes.c_ubyte)
     elif x.dtype == 'int': tsize = ctypes.sizeof(ctypes.c_int)
     else: raise Exception('[ERROR] Unknown datatype.')
     return tsize
