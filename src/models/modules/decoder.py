@@ -80,6 +80,7 @@ class Decoder(nn.Module):
                         zsize += num_classes
                     if i == depth - 1:
                         wsize = self.window_size
+                    else: wsize = params[f'layer{i + 1}']['size']
                     modules[f'layer{i}'] = FullyConnected(
                         input      = zsize,
                         output     = wsize,
