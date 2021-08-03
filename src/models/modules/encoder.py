@@ -135,9 +135,14 @@ class Encoder(nn.Module):
                 else: ## Use cloning.
                     if self.latent_distribution == 'Gaussian': raise Exception('Not implemented.')
                     else:
-                        wsize = self.window_size
-                        if num_classes is not None:
-                            wsize += num_classes 
+                        if i == 0:
+                            wsize = self.window_size
+                            if num_classes is not None:
+                                wsize += num_classes 
+                            # TODO: when isize % self.window_size != 0
+                            # if w == self.n_windows - 1:
+                            #    wsize += (params['layer0']['size'] % self.window_size)
+                        else: wsize = params[f'layer{i}']['size']
                         modules[f'layer{i}'] = FullyConnected(
                                 input      = wsize,
                                 output     = params[f'layer{i + 1}']['size'],

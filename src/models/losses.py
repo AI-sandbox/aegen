@@ -14,7 +14,7 @@ def aeloss(x, o, args, distribution, beta=1, backward=False, reduction='sum'):
         if backward: return (loss +  beta * KL_divergence)
         else:        return (loss +  beta * KL_divergence).item(), loss.item(), KL_divergence.item()
     
-    elif distribution == 'Multi-Bernoulli':
+    elif (distribution == 'Multi-Bernoulli') or (distribution == 'Unknown'):
         if backward: return loss
         return loss.item(), loss.item(), 0
     

@@ -36,7 +36,7 @@ def to_numpy(x, z, r, distribution=None):
         return z
     
     x = _to_numpy(x).astype(bool)
-    if distribution == 'Gaussian': z = _to_numpy(z).astype(float)
+    if (distribution == 'Gaussian') or (distribution == 'Unknown'): z = _to_numpy(z).astype(float)
     if distribution == 'Uniform': z = _to_numpy(z).astype(np.dtype('B'))
     else: z = _make01(_to_numpy(z)).astype(bool)
     r =  _to_numpy(r).astype(bool) 
@@ -69,7 +69,7 @@ def metacompressor_metric(x, z, r, distribution=None, algorithm=None, shuffle=bl
     
     ## Unpack z:
     if distribution == 'Gaussian': z = z[0]
-    elif distribution == 'Multi-Bernoulli': pass
+    elif (distribution == 'Multi-Bernoulli') or (distribution == 'Unknown'): pass
     elif distribution == 'Uniform': z = z[0]
     else: raise Exception('[ERROR] Unpack operation failed.')
                 

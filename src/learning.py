@@ -123,6 +123,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 snps_array, labels = snps_array[:, :metadata['vd_metadata']['n_snps']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
                 labels = labels if model['conditional'] else None
             
+            snps_reconstruction = None
             ## Forward inputs through net.
             if model['distribution'] == 'Gaussian':
                 mu, logvar = model['body'].encoder(snps_array, labels)
@@ -142,6 +143,12 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 indices, zq, vq_e_loss, vq_commit_loss, entropy = model['body'].quantizer(ze)
                 args = (indices.int(), vq_e_loss, vq_commit_loss, entropy, model['codebook_size'])
                 snps_reconstruction = model['body'].decoder(zq, labels)
+            elif model['distribution'] == 'Unknown':
+                ze = model['body'].encoder(snps_array, labels)
+                args = ze.float()
+                snps_reconstruction = model['body'].decoder(ze, labels)
+            else:
+                raise Exception('[ERROR] Undefined distribution.')
             
             input_mapper = {
                 'input' : snps_array.bool(),
@@ -362,6 +369,12 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
                 indices, zq, vq_e_loss, vq_commit_loss, entropy = model['body'].quantizer(ze)
                 args = (indices.int(), vq_e_loss, vq_commit_loss, entropy, model['codebook_size'])
                 snps_reconstruction = model['body'].decoder(zq, labels)
+            elif model['distribution'] == 'Unknown':
+                ze = model['body'].encoder(snps_array, labels)
+                args = ze.float()
+                snps_reconstruction = model['body'].decoder(ze, labels)
+            else:
+                raise Exception('[ERROR] Undefined distribution.')
             
             input_mapper = {
                 'input' : snps_array.bool(),
