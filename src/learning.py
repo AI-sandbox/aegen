@@ -118,7 +118,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 snps_array = batch[0].to(device)#.unsqueeze(1)
                 labels = batch[1].to(device) if model['conditional'] else None
             else: 
-                snps_array, labels = online_simulator.simulate()
+                snps_array, labels = online_simulator.simulate(num_generation_max=hyperparams['training']['num_generation_max'])
                 ## TODO: change metadata to isize from model...
                 snps_array, labels = snps_array[:, :metadata['vd_metadata']['n_snps']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
                 labels = labels if model['conditional'] else None

@@ -5,7 +5,7 @@ model:
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
-  window_size: 10000
+  window_size: 2500
   ## If [window-based] define window_cloning, otherwise leave it null.
   window_cloning: false
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
@@ -20,7 +20,7 @@ model:
           features: 8
   ## If model is conditioned define number of classes.
   conditioning:
-      using: false
+      using: true
       num_classes: 7
   ## If denoising mode is turned on.
   denoising:
@@ -44,7 +44,7 @@ model:
       normalize: true
       activation: Tanh
     layer2: 
-      size: 512
+      size: 128
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -53,7 +53,7 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 512
+      size: 128
       dropout: 0
       normalize: true
       activation: ReLU
@@ -76,7 +76,7 @@ hyperparams:
       varloss: false
   ## Optimizer algorithm can be: [Adam, AdamW].
   optimizer:
-       algorithm: AdamW
+       algorithm: Adam
        lr: 0.0001
        weight_decay: 0.01
   ## Scheduler can be: [null, plateau, step, multistep, exponential].
@@ -94,6 +94,7 @@ hyperparams:
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
        simulation: online
+       num_generation_max: 400
        n_batches: 5
        device: cpu
        mode: uniform
