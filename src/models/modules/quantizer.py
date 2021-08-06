@@ -73,6 +73,7 @@ class Quantizer(nn.Module):
         if self.latent_distribution == 'Multi-Bernoulli':
             zq = torch.ones(ze.shape).cuda()
             zq[ze < 0] = -1
+            return zq
         ## In Uniform LS, the quantizer
         ## computes the distances to the
         ## codebook vectors and takes the argmin.
