@@ -66,7 +66,7 @@ class LZAE(Compressor):
     def compress(self, data, lz_algorithm='zstd', shuffle=blosc.BITSHUFFLE, batch_size=512, save_z=None, save_r=None):
         
         latent = np.empty((0, self.bsize), self.latent_type)
-        reconstructed = np.empty((0, self.isize), bool)
+        residual = np.empty((0, self.isize), bool)
 
         print(f'Autoencoder processing data of shape {data.shape}...')
         ini = time.time()
@@ -89,25 +89,26 @@ class LZAE(Compressor):
             x = x.cpu().detach().numpy()
             r = np.abs(x - o).astype(bool)
             ## Store residual
-            reconstructed = np.vstack((reconstructed, r))
+            residual = np.vstack((residual, r))
 
             del x, z, o, r
             gc.collect()
             torch.cuda.empty_cache()
         
-        xbin, zbin, rbin = data.tostring(), latent.tostring(), reconstructed.tostring()
+        xbin, zbin, rbin = data.tostring(), latent.tostring(), residual.tostring()
         print(f'Compressing data of size {len(xbin)} bytes...')
         zcom = blosc.compress(zbin, typesize=elem_tsize(latent), cname=lz_algorithm, shuffle=shuffle)
-        rcom = blosc.compress(rbin, typesize=elem_tsize(reconstructed), cname=lz_algorithm, shuffle=shuffle)
+        rcom = blosc.compress(rbin, typesize=elem_tsize(residual), cname=lz_algorithm, shuffle=shuffle)
         end = time.time()
-        del data, latent, reconstructed
         print(f'Compressed size: {len(zcom) + len(rcom)} bytes.')
         print('='*50)
         factor = len(xbin) / (len(zcom) + len(rcom))
+        print(f'Average reconstruction error: {np.sum(residual.astype(float))/data.shape[1]}.')
         print(f'Compression ratio: {np.round(1/factor, 2)}.')
         print(f'Compression factor: x{np.round(factor, 2)}.')
         print(f'Compression time: {np.round(end - ini, 2)} seconds.')
         print('='*50)
+        del data, latent, residual
         
         ## Save compressed latent representation, if desired.
         if save_z is not None:
