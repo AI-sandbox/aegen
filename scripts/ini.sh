@@ -1,4 +1,4 @@
-export CLUSTER="SHERLOCK"
+export CLUSTER="NERO"
 
 if [ "$CLUSTER" == "SHERLOCK" ]; then
 
@@ -12,5 +12,11 @@ elif [ "$CLUSTER" == "CALCULA" ]; then
     export IN_PATH="/mnt/gpid07/users/margarita.geleta"
     export OUT_PATH="/mnt/gpid07/users/margarita.geleta"
     source $USER_PATH/env/bin/activate
+
+elif [ "$CLUSTER" == "NERO" ]; then
+
+    export USER_PATH="/home/geleta/aegen"
+    export IN_PATH="/local-scratch/mrivas"
+    export OUT_PATH="/local-scratch/mrivas"
 
 else echo "Define cluster."; fi
