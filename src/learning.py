@@ -94,8 +94,9 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         offline = False
         datalen = hyperparams['training']['n_batches']
         batch_counter = [None] * datalen
-        log.info('Initializating online simulator...')
-        assert(model['num_classes'] == metadata['vd_metadata']['n_populations'])
+        log.info('Initializating TR online simulator...')
+        if  hyperparams['validation']['simulation'] == 'offline':
+            assert(model['num_classes'] == metadata['vd_metadata']['n_populations'])
         online_simulator = OnlineSimulator(
             batch_size = hyperparams['batch_size'],
             n_populations = model['num_classes'],
@@ -103,8 +104,18 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             balanced = hyperparams['training']['balanced'],
             device = hyperparams['training']['device']
         )
-        log.info('Online simulation initialized.')
+        log.info('Online simulation for TR initialized.')
     else: raise Exception('Simulation can be either [online, offline].')
+    if hyperparams['validation']['simulation'] == 'online':
+        log.info('Initializating VD online simulator...')
+        online_simulator_vd = OnlineSimulator(
+            batch_size = hyperparams['batch_size'],
+            n_populations = model['num_classes'],
+            mode = hyperparams['validation']['mode'],
+            balanced = hyperparams['validation']['balanced'],
+            device = hyperparams['validation']['device']
+        )
+        log.info('Online simulation for VD initialized.')
     #======================== Start training loop ========================#
     log.info('Training loop starting now ...')                              
     for epoch in range(hyperparams['epochs']):
@@ -119,8 +130,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 labels = batch[1].to(device) if model['conditional'] else None
             else: 
                 snps_array, labels = online_simulator.simulate(num_generation_max=hyperparams['training']['num_generation_max'])
-                ## TODO: change metadata to isize from model...
-                snps_array, labels = snps_array[:, :metadata['vd_metadata']['n_snps']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
+                snps_array, labels = snps_array[:, :model['isize']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
                 labels = labels if model['conditional'] else None
             
             snps_reconstruction = None
@@ -236,9 +246,11 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 vd_loader, 
                 epoch, 
                 stats['verbose'], 
+                hyperparams,
                 monitor=monitor, 
                 device=device,
-                metrics=metrics
+                metrics=metrics,
+                simulator=online_simulator_vd
             )
             
             for kmetric, meta in metrics.items():
@@ -333,7 +345,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
     print(f'Training finished in {time.time() - ini}s.')
 
 @timer
-def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metrics=None):
+def validate(model, vd_loader, epoch, verbose, hyperparams, monitor=None, device='cpu', metrics=None, simulator=None):
 
     # Set to evaluation mode
     model['body'].eval()
@@ -342,14 +354,26 @@ def validate(model, vd_loader, epoch, verbose, monitor=None, device='cpu', metri
     ## Initialize metrics dict.
     aux_vd_metrics = create_metrics_dict(metrics, prefix='aux')
     
+    ## Simulation mode.
+    offline = (simulator is None)
+    if not offline:
+        datalen = hyperparams['validation']['n_batches']
+        batch_counter = [None] * datalen
+    
     ini = time.time()
     with torch.no_grad():
         log.info('Validating current model...')
-        for i, batch in enumerate(vd_loader):
-
-            snps_array = batch[0].to(device)
-            labels = batch[1].to(device) if model['conditional'] else None
-
+        for i, batch in enumerate(vd_loader if offline else batch_counter)
+            
+            if offline:
+                snps_array = batch[0].to(device)
+                labels = batch[1].to(device) if model['conditional'] else None
+            else: 
+                snps_array, labels = simulator.simulate(num_generation_max=hyperparams['validation']['num_generation_max'])
+                snps_array, labels = snps_array[:, :model['isize']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
+                labels = labels if model['conditional'] else None
+                
+            snps_reconstruction = None
             ## Forward inputs through net.
             if model['distribution'] == 'Gaussian':
                 mu, logvar = model['body'].encoder(snps_array, labels)
