@@ -7,9 +7,9 @@ model:
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
   window_size: 2500
   ## If [window-based] define window_cloning, otherwise leave it null.
-  window_cloning: false
+  window_cloning: true
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
-  distribution: Unknown  
+  distribution: Multi-Bernoulli  
   ## Definition of Quantizer:  
   ## If distribution is [Uniform] define codebook_size.
   quantizer:
@@ -20,7 +20,7 @@ model:
           features: 8
   ## If model is conditioned define number of classes.
   conditioning:
-      using: true
+      using: false
       num_classes: 7
   ## If denoising mode is turned on.
   denoising:
@@ -35,12 +35,12 @@ model:
   encoder:
     layer0:
       size: 80000
-      dropout: 0
+      dropout: 0.5
       normalize: true
       activation: ReLU
     layer1:
       size: 1250
-      dropout: 0
+      dropout: 0.5
       normalize: true
       activation: Tanh
     layer2: 
@@ -54,12 +54,12 @@ model:
   decoder: 
     layer0:
       size: 128
-      dropout: 0
+      dropout: 0.5
       normalize: true
       activation: ReLU
     layer1:
       size: 1250
-      dropout: 0
+      dropout: 0.5
       normalize: true
       activation: Sigmoid
     layer2:
@@ -76,8 +76,8 @@ hyperparams:
       varloss: false
   ## Optimizer algorithm can be: [Adam, AdamW].
   optimizer:
-       algorithm: Adam
-       lr: 0.0001
+       algorithm: AdamW
+       lr: 0.0025
        weight_decay: 0.01
   ## Scheduler can be: [null, plateau, step, multistep, exponential].
   scheduler: 
@@ -94,11 +94,12 @@ hyperparams:
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
        simulation: online
-       num_generation_max: 400
+       num_generation_max: 600
        n_batches: 5
        device: cpu
        mode: uniform
        balanced: true
+       monitor: None
   ## VD simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   validation:

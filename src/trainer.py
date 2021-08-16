@@ -328,7 +328,7 @@ if __name__ == '__main__':
         summary=summary,
         num=args.num,
         only=args.only,
-        monitor='wandb',
+        monitor=hyperparams['training']['monitor'],
         metrics=metrics
     )
     #======================== End training ========================#
