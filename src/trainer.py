@@ -86,7 +86,9 @@ if __name__ == '__main__':
         log.info(f'VD data loaded.')
         log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
         system_info()
-    else: raise Exception('VD data simulation can only be offline.')
+    else: 
+        log.info('-- USING ONLINE SIMULATION FOR VD DATA --')
+        vd_loader, vd_metadata = None, None
     
     ## TS data loader.
     if bool(args.evolution):
@@ -129,14 +131,19 @@ if __name__ == '__main__':
         sample_mode=False,
     )
 
-    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    log.info(f'Using device: {device}')
     model_parallel = False
-    if torch.cuda.device_count() > 1:
-        model, model_parallel = nn.DataParallel(model), True
-    log.info(f"Using {torch.cuda.device_count()} GPU(s)")
-    log.info(f'Sending model to device {torch.cuda.get_device_name()}')
-    model.to(device)
+    if torch.cuda.is_available():
+        log.info(f"System has {torch.cuda.device_count()} available GPU(s)")
+        if torch.cuda.device_count() > 1:
+            available_gpus = ['cuda:'+str(i) for i in range(torch.cuda.device_count())]
+            log.info(available_gpus)
+            device = available_gpus[0]
+            #model, model_parallel = nn.DataParallel(model), True
+        else: device = 'cuda'
+        model.to(device)
+    else: 
+        log.info('No CUDA device available!')
+        device = 'cpu'
 
     # Number of parameters used in the model
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

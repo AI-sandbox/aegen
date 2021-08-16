@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 class OnlineSimulator:
-    def __init__(self, batch_size, n_populations, mode='uniform', device='cpu', species='human', chr=22, balanced=True):
+    def __init__(self, batch_size, n_populations, mode='uniform', device='cpu', species='human', chr=22, split='train', balanced=True):
         ## Hyperparams set by user.
         self.species = species
         self.chr = chr
@@ -44,7 +44,7 @@ class OnlineSimulator:
         self.mapfiles = {}
         ## Store sample map files in dictionary.
         for i, ancestry in enumerate(self.ancestries):
-            sample_map = pd.read_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{self.species}/chr{self.chr}/prepared/train/{ancestry}/{ancestry}.map'), sep="\t", header=None, index_col=False)
+            sample_map = pd.read_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{self.species}/chr{self.chr}/prepared/{split}/{ancestry}/{ancestry}.map'), sep="\t", header=None, index_col=False)
             sample_map.columns = ["sample", "ancestry"]
             self.mapfiles[ancestry] = {
                 'id' : i,
