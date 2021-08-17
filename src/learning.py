@@ -250,7 +250,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 monitor=monitor, 
                 device=device,
                 metrics=metrics,
-                simulator=online_simulator_vd
+                simulator=online_simulator_vd if hyperparams['validation']['simulation'] == 'online' else None,
             )
             
             for kmetric, meta in metrics.items():
@@ -363,7 +363,7 @@ def validate(model, vd_loader, epoch, verbose, hyperparams, monitor=None, device
     ini = time.time()
     with torch.no_grad():
         log.info('Validating current model...')
-        for i, batch in enumerate(vd_loader if offline else batch_counter)
+        for i, batch in enumerate(vd_loader if offline else batch_counter):
             
             if offline:
                 snps_array = batch[0].to(device)

@@ -13,6 +13,7 @@ class OnlineSimulator:
         ## Hyperparams set by user.
         self.species = species
         self.chr = chr
+        self.split = split
         self.batch_size = batch_size
         self.n_populations = n_populations
         self.mode = mode
@@ -44,7 +45,7 @@ class OnlineSimulator:
         self.mapfiles = {}
         ## Store sample map files in dictionary.
         for i, ancestry in enumerate(self.ancestries):
-            sample_map = pd.read_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{self.species}/chr{self.chr}/prepared/{split}/{ancestry}/{ancestry}.map'), sep="\t", header=None, index_col=False)
+            sample_map = pd.read_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{self.species}/chr{self.chr}/prepared/{self.split}/{ancestry}/{ancestry}.map'), sep="\t", header=None, index_col=False)
             sample_map.columns = ["sample", "ancestry"]
             self.mapfiles[ancestry] = {
                 'id' : i,
@@ -112,8 +113,8 @@ class OnlineSimulator:
         ## If simulate_in_device, batch is moved into device before simulation, 
         ## else is moved after simulation.
         if self.device != 'cpu':
-            batch_snps = batch_snps.to(device)
-            batch_labels = batch_labels.to(device)
+            batch_snps = batch_snps.to(self.device)
+            batch_labels = batch_labels.to(self.device)
 
         ## Select number of generations.
         if self.mode == 'uniform':
@@ -200,6 +201,11 @@ class OnlineSimulator:
             elif (not self.single_ancestry) and self.balanced: 
                 batch_snps = torch.empty(0,num_snps).int()
                 batch_labels = torch.empty(0,num_snps).int()
+
+                if self.device != 'cpu':
+                    batch_snps = batch_snps.to(self.device)
+                    batch_labels = batch_labels.to(self.device)
+
                 for i, ancestry in enumerate(self.ancestries):
                     aux_batch_size = (self.batch_size // len(self.ancestries)) + (0 if i < len(self.ancestries) - 1 else self.batch_size % len(self.ancestries))
                     ancestry_idx = np.where(self.labels[:,0] == i)[0]
@@ -229,6 +235,11 @@ class OnlineSimulator:
             elif self.single_ancestry and self.balanced:
                 batch_snps = torch.empty(0,num_snps).int()
                 batch_labels = torch.empty(0,num_snps).int()
+
+                if self.device != 'cpu':
+                    batch_snps = batch_snps.to(self.device)
+                    batch_labels = batch_labels.to(self.device)
+
                 for i, ancestry in enumerate(self.ancestries):
                     aux_batch_size = (self.batch_size // len(self.ancestries)) + (0 if i < len(self.ancestries) - 1 else self.batch_size % len(self.ancestries))
                     ancestry_idx = np.where(self.labels[:,0] == i)[0]
@@ -246,6 +257,10 @@ class OnlineSimulator:
                         rate_per_snp=rate_per_snp, 
                         cM=cM
                     )
+
+                    #log.info(batch_snps.dtype, batch_snps.device)
+                    #log.info(anc_batch_snps.dtype, anc_batch_snps.device)
+                    #log.info('\n')
                     
                     batch_snps = torch.cat([batch_snps, anc_batch_snps], axis=0)
                     batch_labels = torch.cat([batch_labels, anc_batch_labels], axis=0)

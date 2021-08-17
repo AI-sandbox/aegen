@@ -7,9 +7,9 @@ model:
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
   window_size: 2500
   ## If [window-based] define window_cloning, otherwise leave it null.
-  window_cloning: true
+  window_cloning: false
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
-  distribution: Multi-Bernoulli  
+  distribution: Unknown
   ## Definition of Quantizer:  
   ## If distribution is [Uniform] define codebook_size.
   quantizer:
@@ -34,12 +34,12 @@ model:
   ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 80000
+      size: 157500
       dropout: 0.5
       normalize: true
       activation: ReLU
     layer1:
-      size: 1250
+      size: 2500
       dropout: 0.5
       normalize: true
       activation: Tanh
@@ -58,12 +58,12 @@ model:
       normalize: true
       activation: ReLU
     layer1:
-      size: 1250
+      size: 2500
       dropout: 0.5
       normalize: true
       activation: Sigmoid
     layer2:
-      size: 80000
+      size: 157500
 
 ## Hyperparameters for training.
 hyperparams:
@@ -103,7 +103,12 @@ hyperparams:
   ## VD simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   validation:
-       simulation: offline
+       simulation: online
+       num_generation_max: 600
+       n_batches: 1
+       device: cpu
+       mode: uniform
+       balanced: true
        ## Scheduler sets the rate on which validation is done. E.g.:
        ## 1: validation is done at the end of each epoch.
        ## 100: validation is done each 100 epochs.
