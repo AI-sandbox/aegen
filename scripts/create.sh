@@ -7,15 +7,25 @@ do
     VALUE=$(echo $ARGUMENT | cut -f2 -d=)   
     case "$KEY" in
             cluster)     cluster=${VALUE} ;;
-            snps) snps=${VALUE} ;;     
+	    ini)      ini=${VALUE} ;;
+    	    end)      end=${VALUE} ;;
             *)   
     esac    
 done
 if [[ -z $cluster ]]; then cluster=$CLUSTER; fi
-#if [[ -z $snps ]]; then echo "Missing SNPs parameters."; exit 1; fi
-if [[ -z $snps ]]; then snps=317408; fi
-echo "[$CLUSTER] Generating datasets with $snps SNPs"
-if [ "$cluster" == "SHERLOCK" ]; then
+if [[ -z $ini ]]; then ini=0; fi
+if [[ -z $end ]]; then end=-1; fi
+echo "[$CLUSTER] Generating datasets with subset ($ini,$end) of SNPs"
+if [ "$cluster" == "NERO" ]; then
+if python3 -c """
+from utils.assemblers import create_dataset; import logging;
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
+create_dataset(arange=($ini,$end))
+""" 
+then echo "[$CLUSTER] Success!"
+else echo "[$CLUSTER] Fail!"; fi
+elif [ "$cluster" == "SHERLOCK" ]; then
 sbatch <<EOT
 #!/bin/sh
 #SBATCH --job-name=cVAEgen$1
@@ -37,7 +47,7 @@ if python3 -c """
 from utils.assemblers import create_dataset; import logging;
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
-create_dataset(max_size=$snps)
+create_dataset(arange=($ini,$end))
 """ 
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi
