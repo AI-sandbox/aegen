@@ -312,7 +312,7 @@ if __name__ == '__main__':
         stats={
             'epoch': 0,
             'verbose': bool(args.verbose),
-            'slide': 15,
+            'slide': 5,
             'best_epoch': 0,
             'best_loss': np.inf,
         },

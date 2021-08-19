@@ -41,6 +41,7 @@ if __name__ == '__main__':
     parser = create_parser()
     args = parser.parse_args()
     species = args.species
+    chr = args.chr
     
     ## Generate single ancestry sample maps for species
     ancestries = single_ancestry_sample_maps(species, reference_panel_version=2)
@@ -65,6 +66,6 @@ if __name__ == '__main__':
         log.info(f'\t{valid.shape[0]} founders for validation')
         log.info(f'\t{test.shape[0]} founders for test')
 
-        train.to_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{species}/chr22/prepared/train/{ancestry}/{ancestry}.map'), sep="\t", header=None, index=False)
-        valid.to_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{species}/chr22/prepared/valid/{ancestry}/{ancestry}.map'), sep="\t", header=None, index=False)
-        test.to_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{species}/chr22/prepared/test/{ancestry}/{ancestry}.map'), sep="\t", header=None, index=False)
+        train.to_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{species}/chr{chr}/prepared/train/{ancestry}/{ancestry}.map'), sep="\t", header=None, index=False)
+        valid.to_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{species}/chr{chr}/prepared/valid/{ancestry}/{ancestry}.map'), sep="\t", header=None, index=False)
+        test.to_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{species}/chr{chr}/prepared/test/{ancestry}/{ancestry}.map'), sep="\t", header=None, index=False)

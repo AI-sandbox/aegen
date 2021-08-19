@@ -150,12 +150,12 @@ def holdout_by_pop(snps, populations, *ratios, seed=123, verbose=True):
     
     return _sets, _pops
 
-def get_snps_by_pop(pop, split, max_size=5000, max_gen=None):
+def get_snps_by_pop(pop, split, species, chr, arange=(0,-1), max_gen=None):
     log.info(f'Fetching SNPs for population {pop}')
-    for i, snps_arr in enumerate(glob.glob(os.path.join(os.environ.get('IN_PATH'), f'data/human/chr22/prepared/{split}/{pop}/generations/{pop}_gen_*.npy'))):
+    for i, snps_arr in enumerate(glob.glob(os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chr}/prepared/{split}/{pop}/generations/{pop}_gen_*.npy'))):
         if max_gen is not None and i + 1 >= max_gen: break
         else:
-            aux = np.load(snps_arr, mmap_mode='r+')[:,:max_size].astype(bool)
+            aux = np.load(snps_arr, mmap_mode='r+')[:,arange[0]:arange[1]].astype(bool)
             log.info(f'Generation {i+1} has {aux.shape[0]} individuals')
             if i == 0:
                 arr = np.empty((0, aux.shape[1]), bool)
@@ -165,15 +165,16 @@ def get_snps_by_pop(pop, split, max_size=5000, max_gen=None):
     log.info('Done.')
     return arr
 
-def create_dataset(max_size=5000, max_gen=None, seed=123):
+def create_dataset(species, chr, arange=(0,-1), max_gen=None, seed=123):
     pops = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
     for split in ['train', 'valid', 'test']:
         for i in range(1, len(pops)):
             if i == 1:
-                pop0, pop1 = get_snps_by_pop(pops[0], split=split, max_size=max_size, max_gen=max_gen), get_snps_by_pop(pops[1], split=split, max_size=max_size)
+                pop0 = get_snps_by_pop(pops[0], split=split, species=species, chr=chr, arange=arange, max_gen=max_gen)
+                pop1 = get_snps_by_pop(pops[1], split=split, species=species, chr=chr, arange=arange, max_gen=max_gen)
                 X, Y = np.vstack((pop0, pop1)), np.concatenate((np.array([0]*len(pop0)), np.array([1]*len(pop1))), axis=0)
             else:
-                popI = get_snps_by_pop(pops[i], split=split, max_size=max_size, max_gen=max_gen)
+                popI = get_snps_by_pop(pops[i], split=split, species=species, chr=chr, arange=arange, max_gen=max_gen)
                 X, Y = np.vstack((X, popI)), np.concatenate((Y, np.array([i]*len(popI))), axis=0)
             assert len(X) == len(Y)
         np.random.seed(seed)
@@ -182,7 +183,7 @@ def create_dataset(max_size=5000, max_gen=None, seed=123):
         X, Y = X[idxs], Y[idxs]
         
         log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
-        h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/human/chr22/prepared/{split}/{split}{int(max_size/1000)}K_orig.h5'), 'w')
+        h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/{species}/chr{chr}/prepared/{split}/{split}{int(end-ini)}K_ini_end.h5'), 'w')
         h5f.create_dataset('snps', data=X.astype(bool), dtype=np.dtype('bool'))
         h5f.create_dataset('populations', data=Y.astype('uint8'), dtype=np.dtype('uint8'))
         h5f.close()
@@ -191,7 +192,7 @@ def create_dataset(max_size=5000, max_gen=None, seed=123):
         if split == 'train':
             X, Y = X[:25000,], Y[:25000]
             log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
-            h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/human/chr22/prepared/{split}/{split}{int(max_size/1000)}K.h5'), 'w')
+            h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/human/chr22/prepared/{split}/{split}{int(end-ini)}K_ini_end_reduced.h5'), 'w')
             h5f.create_dataset('snps', data=X.astype(bool), dtype=np.dtype('bool'))
             h5f.create_dataset('populations', data=Y.astype('uint8'), dtype=np.dtype('uint8'))
             h5f.close()

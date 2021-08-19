@@ -1,5 +1,5 @@
 #!/bin/bash
-source ini.sh
+source $USER_PATH/scripts/ini.sh
 for ARGUMENT in "$@" 
 do
     KEY=$(echo $ARGUMENT | cut -f1 -d=)
@@ -7,6 +7,7 @@ do
     case "$KEY" in
             cluster)     cluster=${VALUE} ;;
             species)     species=${VALUE} ;;
+	    chr)         chr=${VALUE} ;;
             generations) generations=${VALUE} ;;  
             individuals) individuals=${VALUE} ;;     
             *)   
@@ -14,22 +15,30 @@ do
 done
 if [[ -z $cluster ]]; then cluster=$CLUSTER; fi
 if [[ -z $species ]]; then echo "Missing species. Exiting..."; exit 1; fi
+if [[ -z $chr ]]; then echo "Missing chromosome. Exiting...."; exit 1; fi
 if [[ -z $generations ]]; then echo "Missing generations parameters. Exiting..."; exit 1; fi
 if [[ -z $individuals ]]; then echo "Missing individuals parameters. Exiting..."; exit 1; fi
-echo "[$CLUSTER] Generating $generations generations with $species $individuals individuals in each population"
+echo "[$CLUSTER] Generating $generations generations with $species chromosome $chr $individuals individuals in each population."
 
 dataset=("train" "valid" "test")
 population=("EUR" "EAS" "AMR" "SAS" "AFR" "OCE" "WAS")
 for set in "${dataset[@]}"
-do mkdir -p $OUT_PATH/data/$species/chr22/prepared/$set
+do mkdir -p $OUT_PATH/data/$species/chr$chr/prepared/$set
     for pop in "${population[@]}"
-    do mkdir -p $OUT_PATH/data/$species/chr22/prepared/$set/$pop; 
-       mkdir -p $OUT_PATH/data/$species/chr22/prepared/$set/$pop/generations
+    do mkdir -p $OUT_PATH/data/$species/chr$chr/prepared/$set/$pop; 
+       mkdir -p $OUT_PATH/data/$species/chr$chr/prepared/$set/$pop/generations
     done
 done
 
 cd $USER_PATH/src
-if [ "$cluster" == "SHERLOCK" ]; then
+if [ "$cluster" == "NERO" ]; then
+python3 $USER_PATH/src/utils/mapper.py --species $species
+if python3 $USER_PATH/src/pyadmix/admix.py \
+   $IN_PATH/data/$species/chr$chr/ref_final_beagle_phased_1kg_hgdp_sgdp_chr$chr\_hg19.vcf \
+   $OUT_PATH/data/$species/chr$chr/prepared/ $generations $individuals $chr
+then echo "[$CLUSTER] Success!"
+else echo "[$CLUSTER] Fail!"; fi
+elif [ "$cluster" == "SHERLOCK" ]; then
 sbatch <<EOT
 #!/bin/sh
 #SBATCH --job-name=sVAEgen$1
