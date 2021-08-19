@@ -5,7 +5,7 @@ model:
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
-  window_size: 2500
+  window_size: 5000
   ## If [window-based] define window_cloning, otherwise leave it null.
   window_cloning: false
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
@@ -34,7 +34,7 @@ model:
   ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 157500
+      size: 80000
       dropout: 0.5
       normalize: true
       activation: ReLU
@@ -44,7 +44,7 @@ model:
       normalize: true
       activation: Tanh
     layer2: 
-      size: 128
+      size: 4
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -53,7 +53,7 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 128
+      size: 4
       dropout: 0.5
       normalize: true
       activation: ReLU
@@ -63,11 +63,11 @@ model:
       normalize: true
       activation: Sigmoid
     layer2:
-      size: 157500
+      size: 80000
 
 ## Hyperparameters for training.
 hyperparams:
-  epochs: 2000
+  epochs: 200
   batch_size: 512
   loss:
       ## Variational beta.
@@ -99,11 +99,11 @@ hyperparams:
        device: cpu
        mode: uniform
        balanced: true
-       monitor: None
+       monitor: wandb
   ## VD simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   validation:
-       simulation: online
+       simulation: offline
        num_generation_max: 600
        n_batches: 1
        device: cpu
@@ -112,7 +112,7 @@ hyperparams:
        ## Scheduler sets the rate on which validation is done. E.g.:
        ## 1: validation is done at the end of each epoch.
        ## 100: validation is done each 100 epochs.
-       scheduler: 10
+       scheduler: 5
   ## TS simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   testing:
@@ -126,4 +126,4 @@ hyperparams:
       ## Scheduler sets the rate on which checkpointing is done. E.g.:
       ## 1: checkpointing is done at the end of each epoch.
       ## 100: checkpointing is done each 100 epochs.
-      scheduler: 10
+      scheduler: 5
