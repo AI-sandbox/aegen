@@ -9,19 +9,24 @@ do
             cluster)     cluster=${VALUE} ;;
 	    ini)      ini=${VALUE} ;;
     	    end)      end=${VALUE} ;;
-            *)   
+	    species)  species=${VALUE};;
+	    chm)      chm=${VALUE};;
+	    split)    split=${VALUE};;
     esac    
 done
 if [[ -z $cluster ]]; then cluster=$CLUSTER; fi
 if [[ -z $ini ]]; then ini=0; fi
 if [[ -z $end ]]; then end=-1; fi
-echo "[$CLUSTER] Generating datasets with subset ($ini,$end) of SNPs"
+if [[ -z $species ]]; then echo "Undefined species."; exit 1; fi
+if [[ -z $chm ]]; then echo "Undefined chromosome."; exit 1; fi
+if [[ -z $split ]]; then echo "Undefined split."; exit 1; fi
+echo "[$CLUSTER] Generating $split dataset with subset ($ini,$end) of $species SNPs from chromosome $chm"
 if [ "$cluster" == "NERO" ]; then
 if python3 -c """
 from utils.assemblers import create_dataset; import logging;
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
-create_dataset(arange=($ini,$end))
+create_dataset('$species',$chm,split='$split',arange=($ini,$end))
 """ 
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi
