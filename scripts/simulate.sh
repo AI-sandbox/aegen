@@ -32,7 +32,7 @@ done
 
 cd $USER_PATH/src
 if [ "$cluster" == "NERO" ]; then
-python3 $USER_PATH/src/utils/mapper.py --species $species
+python3 $USER_PATH/src/utils/mapper.py --species $species --chr $chr
 if python3 $USER_PATH/src/pyadmix/admix.py \
    $IN_PATH/data/$species/chr$chr/ref_final_beagle_phased_1kg_hgdp_sgdp_chr$chr\_hg19.vcf \
    $OUT_PATH/data/$species/chr$chr/prepared/ $generations $individuals $chr
