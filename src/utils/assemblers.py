@@ -150,9 +150,9 @@ def holdout_by_pop(snps, populations, *ratios, seed=123, verbose=True):
     
     return _sets, _pops
 
-def get_snps_by_pop(pop, split, species, chr, arange=(0,-1), max_gen=None):
+def get_snps_by_pop(pop, split, species, chm, arange=(0,-1), max_gen=None):
     log.info(f'Fetching SNPs for population {pop}')
-    for i, snps_arr in enumerate(glob.glob(os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chr}/prepared/{split}/{pop}/generations/{pop}_gen_*.npy'))):
+    for i, snps_arr in enumerate(glob.glob(os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chm}/prepared/{split}/{pop}/generations/{pop}_gen_*.npy'))):
         if max_gen is not None and i + 1 >= max_gen: break
         else:
             aux = np.load(snps_arr, mmap_mode='r+')[:,arange[0]:arange[1]].astype(bool)
@@ -165,38 +165,38 @@ def get_snps_by_pop(pop, split, species, chr, arange=(0,-1), max_gen=None):
     log.info('Done.')
     return arr
 
-def create_dataset(species, chr, arange=(0,-1), max_gen=None, seed=123):
+def create_dataset(species, chm, arange=(0,-1), split='test', max_gen=None, seed=123):
     pops = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
-    for split in ['train', 'valid', 'test']:
-        for i in range(1, len(pops)):
-            if i == 1:
-                pop0 = get_snps_by_pop(pops[0], split=split, species=species, chr=chr, arange=arange, max_gen=max_gen)
-                pop1 = get_snps_by_pop(pops[1], split=split, species=species, chr=chr, arange=arange, max_gen=max_gen)
-                X, Y = np.vstack((pop0, pop1)), np.concatenate((np.array([0]*len(pop0)), np.array([1]*len(pop1))), axis=0)
-            else:
-                popI = get_snps_by_pop(pops[i], split=split, species=species, chr=chr, arange=arange, max_gen=max_gen)
-                X, Y = np.vstack((X, popI)), np.concatenate((Y, np.array([i]*len(popI))), axis=0)
-            assert len(X) == len(Y)
-        np.random.seed(seed)
-        idxs = np.arange(len(X))
-        np.random.shuffle(idxs)
-        X, Y = X[idxs], Y[idxs]
+    
+    for i in range(1, len(pops)):
+        if i == 1:
+            pop0 = get_snps_by_pop(pops[0], split=split, species=species, chm=chm, arange=arange, max_gen=max_gen)
+            pop1 = get_snps_by_pop(pops[1], split=split, species=species, chm=chm, arange=arange, max_gen=max_gen)
+            X, Y = np.vstack((pop0, pop1)), np.concatenate((np.array([0]*len(pop0)), np.array([1]*len(pop1))), axis=0)
+        else:
+            popI = get_snps_by_pop(pops[i], split=split, species=species, chm=chm, arange=arange, max_gen=max_gen)
+            X, Y = np.vstack((X, popI)), np.concatenate((Y, np.array([i]*len(popI))), axis=0)
+        assert len(X) == len(Y)
+    np.random.seed(seed)
+    idxs = np.arange(len(X))
+    np.random.shuffle(idxs)
+    X, Y = X[idxs], Y[idxs]
         
+    log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
+    h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/{species}/chr{chm}/prepared/{split}/{split}{int(arange[1]-arange[0])}_{arange[0]}_{arange[1]}.h5'), 'w')
+    h5f.create_dataset('snps', data=X.astype(bool), dtype=np.dtype('bool'))
+    h5f.create_dataset('populations', data=Y.astype('uint8'), dtype=np.dtype('uint8'))
+    h5f.close()
+    log.info('Done.\n')
+        
+    if split == 'train':
+        X, Y = X[:25000,], Y[:25000]
         log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
-        h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/{species}/chr{chr}/prepared/{split}/{split}{int(end-ini)}K_ini_end.h5'), 'w')
+        h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/{species}/chr{chm}/prepared/{split}/{split}{int(arange[1]-arange[0])}_{arange[0]}_{arange[1]}_reduced.h5'), 'w')
         h5f.create_dataset('snps', data=X.astype(bool), dtype=np.dtype('bool'))
         h5f.create_dataset('populations', data=Y.astype('uint8'), dtype=np.dtype('uint8'))
         h5f.close()
         log.info('Done.\n')
-        
-        if split == 'train':
-            X, Y = X[:25000,], Y[:25000]
-            log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
-            h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/human/chr22/prepared/{split}/{split}{int(end-ini)}K_ini_end_reduced.h5'), 'w')
-            h5f.create_dataset('snps', data=X.astype(bool), dtype=np.dtype('bool'))
-            h5f.create_dataset('populations', data=Y.astype('uint8'), dtype=np.dtype('uint8'))
-            h5f.close()
-            log.info('Done.\n')
 
 if __name__ == '__main__':
     npy2hdf5(
