@@ -2,10 +2,14 @@
 model: 
   ## Shape can be: [global, window-based, hybrid].
   shape: window-based
+  ## Segment of SNPs to process.
+  arange:
+     ini: 0
+     end: 10000
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
-  window_size: 5000
+  window_size: 2500
   ## If [window-based] define window_cloning, otherwise leave it null.
   window_cloning: false
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
@@ -34,17 +38,17 @@ model:
   ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 80000
+      size: 10000
       dropout: 0.5
       normalize: true
       activation: ReLU
     layer1:
-      size: 2500
+      size: 2048
       dropout: 0.5
       normalize: true
       activation: Tanh
     layer2: 
-      size: 4
+      size: 1024
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -53,17 +57,17 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 4
+      size: 1024
       dropout: 0.5
       normalize: true
       activation: ReLU
     layer1:
-      size: 2500
+      size: 2048
       dropout: 0.5
       normalize: true
       activation: Sigmoid
     layer2:
-      size: 80000
+      size: 10000
 
 ## Hyperparameters for training.
 hyperparams:
@@ -94,7 +98,7 @@ hyperparams:
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
        simulation: online
-       num_generation_max: 600
+       num_generation_max: 400
        n_batches: 5
        device: cpu
        mode: uniform

@@ -32,7 +32,9 @@ if __name__ == '__main__':
         params = yaml.safe_load(f)
     model_params = params['model']
     hyperparams = params['hyperparams']
-    ksize=int(model_params['encoder']['layer0']['size'] / 1000)
+    arange = (model_params['arange']['ini'], model_params['arange']['end'])
+    ksize=model_params['encoder']['layer0']['size']
+    assert(int(ksize) == int(arange[1] - arange[0]))
     
     def summary_net(exp, species, chr, model_params, hyperparams):
         if (model_params['conditioning']['num_classes'] is not None) and (model_params['conditioning']['using']):
@@ -59,8 +61,8 @@ if __name__ == '__main__':
         tr_loader, tr_metadata = loader(
             ipath=IPATH,
             batch_size=hyperparams['batch_size'], 
-            split_set='valid',
-            ksize=ksize,
+            split_set='train',
+            arange=arange,
             only=args.only,
             conditional=model_params['conditioning']['using'],
         )
@@ -79,7 +81,7 @@ if __name__ == '__main__':
             ipath=IPATH,
             batch_size=hyperparams['batch_size'], 
             split_set='valid',
-            ksize=ksize,
+            arange=arange,
             only=args.only,
             conditional=model_params['conditioning']['using']
         )
@@ -99,7 +101,7 @@ if __name__ == '__main__':
                 ipath=IPATH,
                 batch_size=hyperparams['batch_size'], 
                 split_set='test',
-                ksize=ksize,
+                arange=arange,
                 only=args.only,
                 conditional=model_params['conditioning']['using']
             )

@@ -10,7 +10,7 @@ from utils.decorators import timer
 from utils.assemblers import one_hot_encoder
 
 class SNPs(Dataset):
-    def __init__(self, ipath, split_set='train', ksize=5, only=None, conditional=False):
+    def __init__(self, ipath, arange, split_set='train', only=None, conditional=False):
         """
         Inputs:
             split_set: to load.
@@ -19,7 +19,7 @@ class SNPs(Dataset):
             conditional: return one-hot labels of classes with num classes.
         """
 
-        h5f = h5py.File(os.path.join(ipath, f'{split_set}/{split_set}{ksize}K.h5'), 'r')
+        h5f = h5py.File(os.path.join(ipath, f'{split_set}/{split_set}{int(arange[1]-arange[0])}_{arange[0]}_{arange[1]}.h5'), 'r')
         self.snps = h5f['snps'][:].astype(float)
         self.populations = h5f['populations'][:].astype(int)
         h5f.close()
@@ -47,9 +47,9 @@ class SNPs(Dataset):
         return (snps_array, label)
 
 @timer
-def loader(ipath, batch_size, split_set='train', ksize=5, only=None, conditional=False):
+def loader(ipath, batch_size, arange, split_set='train', only=None, conditional=False):
     if only is not None and conditional: raise Exception('Conditional VAE with a unique population.')
-    dataset = SNPs(ipath=ipath, split_set=split_set, ksize=ksize, only=only, conditional=conditional)
+    dataset = SNPs(ipath=ipath, split_set=split_set, arange=arange, only=only, conditional=conditional)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
     metadata = {
         'n_samples' : dataset.n_samples,
