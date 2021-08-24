@@ -13,15 +13,15 @@ model:
   ## If [window-based] define window_cloning, otherwise leave it null.
   window_cloning: false
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
-  distribution: Unknown
+  distribution: Uniform
   ## Definition of Quantizer:  
   ## If distribution is [Uniform] define codebook_size.
   quantizer:
       codebook_size: 64
       win_independent: false
       multi_head:
-          using: false
-          features: 8
+          using: true
+          features: 64
   ## If model is conditioned define number of classes.
   conditioning:
       using: false
@@ -43,12 +43,12 @@ model:
       normalize: true
       activation: ReLU
     layer1:
-      size: 2048
+      size: 1250
       dropout: 0.5
       normalize: true
       activation: Tanh
     layer2: 
-      size: 1024
+      size: 512
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -57,12 +57,12 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 1024
+      size: 512
       dropout: 0.5
       normalize: true
       activation: ReLU
     layer1:
-      size: 2048
+      size: 1250
       dropout: 0.5
       normalize: true
       activation: Sigmoid
@@ -71,8 +71,9 @@ model:
 
 ## Hyperparameters for training.
 hyperparams:
-  epochs: 200
+  epochs: 150
   batch_size: 512
+  slide: 15
   loss:
       ## Variational beta.
       beta: 1,
@@ -97,10 +98,10 @@ hyperparams:
   ## In [offline] simulation [n_batches, device, mode] are neglected.
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
-       simulation: online
+       simulation: offline
        num_generation_max: 400
        n_batches: 5
-       device: cpu
+       device: cuda
        mode: uniform
        balanced: true
        monitor: wandb
@@ -108,9 +109,9 @@ hyperparams:
   ## [offline] loads a dataset from disk.
   validation:
        simulation: offline
-       num_generation_max: 600
+       num_generation_max: 400
        n_batches: 1
-       device: cpu
+       device: cuda
        mode: uniform
        balanced: true
        ## Scheduler sets the rate on which validation is done. E.g.:

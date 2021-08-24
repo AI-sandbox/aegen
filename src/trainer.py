@@ -34,6 +34,7 @@ if __name__ == '__main__':
     hyperparams = params['hyperparams']
     arange = (model_params['arange']['ini'], model_params['arange']['end'])
     ksize=model_params['encoder']['layer0']['size']
+    print(ksize, arange[1] - arange[0])
     assert(int(ksize) == int(arange[1] - arange[0]))
     
     def summary_net(exp, species, chr, model_params, hyperparams):
@@ -235,27 +236,27 @@ if __name__ == '__main__':
         'cratio_no_shuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': cratio_no_shuffle,
-            'params' : ['lz4', 'zlib', 'zstd']
+            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
         },
         'cratio_bitshuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': cratio_bitshuffle,
-            'params' : ['lz4', 'zlib', 'zstd']
+            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
         },
         'ccratio_no_shuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': ccratio_no_shuffle,
-            'params' : ['lz4', 'zlib', 'zstd']
+            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
         },
         'cratio_bitshuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': cratio_bitshuffle,
-            'params' : ['lz4', 'zlib', 'zstd']
+            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
         },
         'ccratio_bitshuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': ccratio_bitshuffle,
-            'params' : ['lz4', 'zlib', 'zstd']
+            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
         },
         #'partial_embedding_ccratio_no_shuffle' : {
         #    'inputs' : ['input', 'mu', 'residual', 'distribution'],
@@ -295,7 +296,8 @@ if __name__ == '__main__':
             'bsize':model_params['decoder']['layer0']['size'],
             'window_size': model_params['window_size'] if model_params['shape'] == 'window-based' else None,
             'window_cloning': model_params['window_cloning'] if model_params['shape'] == 'window-based' else None,
-            'codebook_size': model_params['quantizer']['codebook_size'] if model_params['distribution'] == 'Uniform' else None, 
+            'codebook_size': model_params['quantizer']['codebook_size'] if model_params['distribution'] == 'Uniform' else None,
+            'heads': model_params['quantizer']['multi_head']['features'] if (model_params['distribution'] == 'Uniform') and (model_params['quantizer']['multi_head']['using']) else None,
             'distribution': model_params['distribution'],
             'body': model, 
             'parallel': model_parallel,
@@ -314,7 +316,7 @@ if __name__ == '__main__':
         stats={
             'epoch': 0,
             'verbose': bool(args.verbose),
-            'slide': 5,
+            'slide': hyperparams['slide'],
             'best_epoch': 0,
             'best_loss': np.inf,
         },
