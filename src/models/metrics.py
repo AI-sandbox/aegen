@@ -37,7 +37,7 @@ def to_numpy(x, z, r, distribution=None):
     
     x = _to_numpy(x).astype(bool)
     if (distribution == 'Gaussian') or (distribution == 'Unknown'): z = _to_numpy(z).astype(float)
-    if distribution == 'Uniform': z = _to_numpy(z).astype(np.dtype('B'))
+    elif distribution == 'Uniform': z = _to_numpy(z).astype(np.dtype('B'))
     else: z = _make01(_to_numpy(z)).astype(bool)
     r =  _to_numpy(r).astype(bool) 
     return x, z, r
@@ -82,6 +82,18 @@ def metacompressor_metric(x, z, r, distribution=None, algorithm=None, shuffle=bl
         else: return len(xbin) / (clen_zbin + clen_recbin)
     elif kind == 'ccratio':
         clen_xbin, clen_zbin, clen_recbin = clen(xbin, elem_tsize(x), algorithm, shuffle=shuffle), clen(zbin, elem_tsize(z), algorithm, shuffle=shuffle), clen(recbin, elem_tsize(r), algorithm, shuffle=shuffle)
+        print(f'~ USING {algorithm} ~')
+        print('='*50)
+        print(f'Compressing data of size {len(xbin)} bytes...')
+        print(f'Latent representation bytes: {len(zbin)}.')
+        print(f'Residual bytes: {len(recbin)}.')
+        print('='*50)
+        print(f'Compressed size of raw data: {clen_xbin} bytes.')
+        print(f'Compressed latent representation bytes: {clen_zbin}.')
+        print(f'Compressed residual bytes: {clen_recbin}.')
+        print(f'Compressed size of ae-processed data: {clen_zbin + clen_recbin} bytes.')
+        print('='*50)
+        print(f'CCRATIO: {clen_xbin / (clen_zbin + clen_recbin)}\n')
         if partial is None:        return clen_xbin / (clen_zbin + clen_recbin)
         if partial == 'embedding': return clen_xbin / clen_zbin
         if partial == 'residual':  return clen_xbin / clen_recbin
