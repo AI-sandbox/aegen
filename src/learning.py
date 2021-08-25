@@ -273,6 +273,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                     'shape':model['shape'],
                     'isize':model['isize'],
                     'bsize':model['bsize'],
+                    'heads':model['heads'],
                     'window_size': model['window_size'],
                     'distribution': model['distribution'],
                     'conditional': model['conditional'],
@@ -292,7 +293,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 }
             )
             best_epoch = epoch + 1
-            best_loss = vd_metrics['vd_ae_loss'][-1]
+            best_loss = vd_metrics['vd_residual_sparsity'][-1]
             saver(
                 obj='stats',
                 num=num, 

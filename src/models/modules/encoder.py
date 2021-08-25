@@ -116,7 +116,6 @@ class Encoder(nn.Module):
                             ## If multi-head, define heads in the last layer.
                             if (self.heads > 1) and (i == depth - 1):
                                 for h in range(self.heads):
-                                    print(f'Adding layer{i}_win{w}_head{h}...')
                                     modules[f'layer{i}_win{w}_head{h}'] = FullyConnected(
                                         input      = wsize,
                                         output     = params[f'layer{i + 1}']['size'],

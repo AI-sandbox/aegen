@@ -236,21 +236,16 @@ if __name__ == '__main__':
         'cratio_no_shuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': cratio_no_shuffle,
-            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
+            'params' : ['lz4', 'zlib', 'zstd']
         },
         'cratio_bitshuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': cratio_bitshuffle,
-            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
+            'params' : ['lz4', 'zlib', 'zstd']
         },
         'ccratio_no_shuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': ccratio_no_shuffle,
-            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
-        },
-        'cratio_bitshuffle' : {
-            'inputs' : ['input', 'args', 'residual', 'distribution'],
-            'function': cratio_bitshuffle,
             'params' : ['zstd']#['lz4', 'zlib', 'zstd']
         },
         'ccratio_bitshuffle' : {

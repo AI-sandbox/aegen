@@ -49,6 +49,7 @@ class Compressor(ABC):
         
         if self.distribution == 'Uniform':
             self.latent_type = np.dtype('B')
+            self.heads = 1#self.stats['heads'] if self.stats['heads'] is not None else 1
         elif self.distribution == 'Multi-Bernoulli':
             self.latent_type = bool
         elif self.distribution == 'Gaussian': 
@@ -85,7 +86,8 @@ class LZAE(Compressor):
     def compress(self, data, lz_algorithm='zstd', shuffle=blosc.BITSHUFFLE, batch_size=512, save_z=None, save_r=None):
         
         if self.distribution == 'Uniform':
-            latent = np.empty((0, int(self.isize / self.wsize)), self.latent_type)
+            latent = np.empty((0, self.heads, int(self.isize / self.wsize)), self.latent_type)
+            if self.heads <= 1: latent = np.squeeze(latent, axis = 1)
         else: latent = np.empty((0, self.bsize), self.latent_type)
         residual = np.empty((0, self.isize), bool)
 
@@ -101,6 +103,7 @@ class LZAE(Compressor):
             if self.distribution == 'Uniform': indices, z, _, _, _ = self.ae.quantizer(z)
             elif self.distribution == 'Multi-Bernoulli': z = self.ae.quantizer(z)
             elif self.distribution == 'Gaussian': z = torch.cat(z[0], axis=-1)
+                
             ## Obtain reconstruction
             o = (self.ae.decoder(z, None) > 0.5).float().cpu().detach().numpy()
             ## Store latent representation
@@ -108,26 +111,34 @@ class LZAE(Compressor):
             if self.distribution == 'Multi-Bernoulli':
                 z = 1/2*z + 1/2
             elif self.distribution == 'Uniform': 
-                z = indices.float().cpu().detach().numpy()
+                z = indices.int().cpu().detach().numpy()
             z = z.astype(self.latent_type)
-            latent = np.vstack((latent, z))
+            if self.distribution != 'Uniform' or (self.distribution == 'Uniform' and self.heads <= 1): 
+                latent = np.vstack((latent, z))
+            else: 
+                z = indices.permute(0,2,1).cpu().detach().numpy()
+                latent = np.concatenate([latent, z], axis=0)
             ## Compute residual
             x = x.cpu().detach().numpy()
             r = np.abs(x - o).astype(bool)
             ## Store residual
             residual = np.vstack((residual, r))
-
+            
             del x, z, o, r
             gc.collect()
             torch.cuda.empty_cache()
         
         xbin, zbin, rbin = data.tostring(), latent.tostring(), residual.tostring()
         print(f'Compressing data of size {len(xbin)} bytes...')
+        print(f'Latent representation bytes: {len(zbin)}.')
+        print(f'Residual bytes: {len(rbin)}.')
         xcom = blosc.compress(xbin, typesize=1, cname=lz_algorithm, shuffle=shuffle)
         print(f'Compressed size of raw data: {len(xcom)} bytes.')
         zcom = blosc.compress(zbin, typesize=elem_tsize(latent), cname=lz_algorithm, shuffle=shuffle)
         rcom = blosc.compress(rbin, typesize=elem_tsize(residual), cname=lz_algorithm, shuffle=shuffle)
         end = time.time()
+        print(f'Compressed latent representation bytes: {len(zcom)}.')
+        print(f'Compressed residual bytes: {len(rcom)}.')
         print(f'Compressed size of ae-processed data: {len(zcom) + len(rcom)} bytes.')
         print('='*50)
         factor = len(xbin) / (len(zcom) + len(rcom))
@@ -165,11 +176,14 @@ class LZAE(Compressor):
         rbin = blosc.decompress(rcom)
         
         if self.distribution == 'Uniform':
-            indices = torch.from_numpy(np.frombuffer(zbin, dtype=self.latent_type).reshape(-1,int(self.isize/self.wsize))).cuda().long()
-            z = self.ae.quantizer.codebook.weight.index_select(0, indices.view(-1)).view((-1,self.bsize)).cpu().detach().numpy()
+            indices = torch.from_numpy(np.frombuffer(zbin, dtype=self.latent_type).reshape(-1,self.heads,int(self.isize/self.wsize))).cuda().long()
+            if self.heads <= 1: indices = indices.squeeze(1)
+            z = self.ae.quantizer.codebook.weight.index_select(0, indices.view(-1)).view((-1,self.heads,self.bsize)).cpu().detach().numpy()
+            if self.heads <= 1: z = np.squeeze(z, axis=1)
             del indices
         else:
             z = np.frombuffer(zbin, dtype=self.latent_type).reshape(-1,self.bsize).astype(float)
+        
         r = np.frombuffer(rbin, dtype=bool).reshape(-1,self.isize).astype(int)
         if self.distribution == 'Multi-Bernoulli':
             z = 2*z - 1
@@ -178,7 +192,7 @@ class LZAE(Compressor):
         print(f'Autoencoder processing latent data of shape {z.shape}...')
         ini = time.time()
         for i in range(0, z.shape[0], batch_size):
-            zi = torch.from_numpy(z[i:i + batch_size,:]).float().cuda()
+            zi = torch.from_numpy(z[i:i + batch_size,...]).float().cuda()
             ri = r[i:i + batch_size,:]
             ## Obtain lossless reconstruction.
             o = (self.ae.decoder(zi, None) > 0.5).float().cpu().detach().numpy()
