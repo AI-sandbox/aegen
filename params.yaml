@@ -2,10 +2,14 @@
 model: 
   ## Shape can be: [global, window-based, hybrid].
   shape: window-based
+  ## Model trained on species:
+  species: human
+  ## Model trained on chromosome:
+  chm: 22
   ## Segment of SNPs to process.
   arange:
      ini: 0
-     end: 10000
+     end: 80000
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
@@ -17,11 +21,17 @@ model:
   ## Definition of Quantizer:  
   ## If distribution is [Uniform] define codebook_size.
   quantizer:
-      codebook_size: 64
+      ## Number of embeddings in the codebook.
+      codebook_size: 128
+      ## Choose a different codebook for each window or not.
       win_independent: false
+      ## Defines the rate of the code change.
+      beta: 2
+      ## Define if use multi-head at the encoder end.
       multi_head:
-          using: true
-          features: 64
+          using: false
+          ## Number of heads at the encoder end.
+          features: 1
   ## If model is conditioned define number of classes.
   conditioning:
       using: false
@@ -38,7 +48,7 @@ model:
   ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 10000
+      size: 80000
       dropout: 0.5
       normalize: true
       activation: ReLU
@@ -48,7 +58,7 @@ model:
       normalize: true
       activation: Tanh
     layer2: 
-      size: 512
+      size: 2500
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -57,7 +67,7 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 512
+      size: 2500
       dropout: 0.5
       normalize: true
       activation: ReLU
@@ -67,7 +77,7 @@ model:
       normalize: true
       activation: Sigmoid
     layer2:
-      size: 10000
+      size: 80000
 
 ## Hyperparameters for training.
 hyperparams:
@@ -79,7 +89,7 @@ hyperparams:
       beta: 1,
       ## Varloss: using.
       varloss: false
-  ## Optimizer algorithm can be: [Adam, AdamW].
+  ## Optimizer algorithm can be: [Adam, AdamW, RAdam, QHAdam, Yogi, DiffGrad].
   optimizer:
        algorithm: AdamW
        lr: 0.0025

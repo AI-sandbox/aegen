@@ -9,6 +9,7 @@ import torch
 import logging
 import numpy as np
 import torch.nn as nn
+import torch_optimizer as torchoptim
 
 from parser import create_parser
 
@@ -30,12 +31,19 @@ if __name__ == '__main__':
     args = parser.parse_args()
     with open(args.params, 'r') as f:
         params = yaml.safe_load(f)
+    ## Parameters and hyperparameters.
     model_params = params['model']
     hyperparams = params['hyperparams']
+    
+    ## Specification of data.
+    species = model_params['species']
+    chm = model_params['chm']
     arange = (model_params['arange']['ini'], model_params['arange']['end'])
     ksize=model_params['encoder']['layer0']['size']
-    print(ksize, arange[1] - arange[0])
-    assert(int(ksize) == int(arange[1] - arange[0]))
+    
+    ## Data assertion.
+    if int(ksize) != int(arange[1] - arange[0]):
+        raise Exception('[ERROR] Input shape does not match SNPs segment length!')
     
     def summary_net(exp, species, chr, model_params, hyperparams):
         if (model_params['conditioning']['num_classes'] is not None) and (model_params['conditioning']['using']):
@@ -48,11 +56,11 @@ if __name__ == '__main__':
         name = f'[{exp}] {species.capitalize()} chr{chr}: {model_params["distribution"]} {shape}({",".join(layer_sizes)}), {hyper}, '
         return name
     
-    summary = summary_net(args.num, args.species, args.chr, model_params, hyperparams)
+    summary = summary_net(args.num, species, chm, model_params, hyperparams)
     
     #======================== Prepare data ========================#
     system_info()
-    IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{args.species}/chr{args.chr}/prepared')
+    IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chm}/prepared')
     
     ## TR data loader.
     if hyperparams['training']['simulation'] == 'offline':
@@ -158,23 +166,58 @@ if __name__ == '__main__':
     if hyperparams['optimizer'] is not None:
         if hyperparams['optimizer']['algorithm'] == 'Adam':
             optimizer = torch.optim.Adam(
-            params=model.parameters(), 
-            lr=hyperparams['optimizer']['lr'], 
-            weight_decay=hyperparams['optimizer']['weight_decay']
-        )
+                params=model.parameters(), 
+                lr=hyperparams['optimizer']['lr'], 
+                weight_decay=hyperparams['optimizer']['weight_decay'],
+            )
         elif hyperparams['optimizer']['algorithm'] == 'AdamW':
             optimizer = torch.optim.AdamW(
-            params=model.parameters(), 
-            lr=hyperparams['optimizer']['lr'], 
-            weight_decay=hyperparams['optimizer']['weight_decay']
-        )
+                params=model.parameters(), 
+                lr=hyperparams['optimizer']['lr'], 
+                weight_decay=hyperparams['optimizer']['weight_decay'],
+            )
         # RuntimeError: SparseAdam does not support dense gradients, please consider Adam instead
         elif hyperparams['optimizer']['algorithm'] == 'SparseAdam':
+            raise Exception('[ERROR] SparseAdam does not support dense gradients, please consider Adam instead.')
             optimizer = torch.optim.SparseAdam(
-            params=model.parameters(), 
-            lr=hyperparams['optimizer']['lr'], # HAS NO WEIGHT DECAY!
-            #weight_decay=hyperparams['optimizer']['weight_decay']
-        )
+                params=model.parameters(), 
+                lr=hyperparams['optimizer']['lr'], # HAS NO WEIGHT DECAY!
+            )
+        elif hyperparams['optimizer']['algorithm'] == 'Yogi':
+            optimizer = torchoptim.Yogi(
+                params=model.parameters(), 
+                lr=hyperparams['optimizer']['lr'],
+                betas=(0.9, 0.999),
+                eps=1e-3,
+                initial_accumulator=1e-6,
+                weight_decay=hyperparams['optimizer']['weight_decay'],
+            )
+        elif hyperparams['optimizer']['algorithm'] == 'RAdam':
+            optimizer = torchoptim.RAdam(
+                params=model.parameters(), 
+                lr=hyperparams['optimizer']['lr'],
+                betas=(0.9, 0.999),
+                eps=1e-8,
+                weight_decay=hyperparams['optimizer']['weight_decay'],
+            )
+        elif hyperparams['optimizer']['algorithm'] == 'QHAdam':
+            optimizer = torchoptim.QHAdam(
+                params=model.parameters(), 
+                lr=hyperparams['optimizer']['lr'],
+                betas=(0.9, 0.999),
+                nus=(1.0, 1.0),
+                weight_decay=hyperparams['optimizer']['weight_decay'],
+                decouple_weight_decay=False,
+                eps=1e-8,
+            )
+        elif hyperparams['optimizer']['algorithm'] == 'DiffGrad':
+            optimizer = torchoptim.DiffGrad(
+                params=model.parameters(), 
+                lr=hyperparams['optimizer']['lr'],
+                betas=(0.9, 0.999),
+                eps=1e-8,
+                weight_hyperparams['optimizer']['weight_decay'],
+            )
         else: raise Exception('Unknown optimization algorithm')
     else: raise Exception('Missing optimizer')
     log.info(f'Optimizer ready ++')
