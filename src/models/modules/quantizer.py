@@ -31,6 +31,7 @@ class Quantizer(nn.Module):
             if quantization['codebook_size'] is None: raise Exception('[ERROR] Undefined number of embeddings.')
             self.num_embeddings = quantization['codebook_size']
             self.embedding_dim = params['layer0']['size']
+            self.beta = quantization['beta'] if quantization['beta'] is not None else 1 
             
             ## Determine if codebook is shared.
             self.win_independent = quantization['win_independent']
@@ -93,7 +94,7 @@ class Quantizer(nn.Module):
             # ei towards the encoder outputs ze(x)
             vq_e_loss = torch.mean((zq - ze.detach()) ** 2)
             # Commitment loss
-            vq_commit_loss = torch.mean((zq.detach() - ze)**2) 
+            vq_commit_loss = torch.mean((zq.detach() - ze)**2) * self.beta
 
             probs = torch.zeros(self.num_embeddings)
             unique, counts = np.unique(indices.cpu().detach().numpy(), return_counts=True)
