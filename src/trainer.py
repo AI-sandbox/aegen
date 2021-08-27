@@ -216,7 +216,7 @@ if __name__ == '__main__':
                 lr=hyperparams['optimizer']['lr'],
                 betas=(0.9, 0.999),
                 eps=1e-8,
-                weight_hyperparams['optimizer']['weight_decay'],
+                weight_decay=weight_hyperparams['optimizer']['weight_decay'],
             )
         else: raise Exception('Unknown optimization algorithm')
     else: raise Exception('Missing optimizer')

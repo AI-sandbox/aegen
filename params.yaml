@@ -9,7 +9,7 @@ model:
   ## Segment of SNPs to process.
   arange:
      ini: 0
-     end: 80000
+     end: 10000
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
@@ -22,7 +22,7 @@ model:
   ## If distribution is [Uniform] define codebook_size.
   quantizer:
       ## Number of embeddings in the codebook.
-      codebook_size: 128
+      codebook_size: 64
       ## Choose a different codebook for each window or not.
       win_independent: false
       ## Defines the rate of the code change.
@@ -48,7 +48,7 @@ model:
   ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 80000
+      size: 10000
       dropout: 0.5
       normalize: true
       activation: ReLU
@@ -77,7 +77,7 @@ model:
       normalize: true
       activation: Sigmoid
     layer2:
-      size: 80000
+      size: 10000
 
 ## Hyperparameters for training.
 hyperparams:
