@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def aeloss(x, o, args, distribution, beta=1, backward=False, reduction='sum'):
+def aeloss(x, o, args, distribution, beta=1, backward=False, reduction='mean'):
     
     x, o = x.float(), o.float()
     loss = F.binary_cross_entropy(o, x, reduction=reduction)
@@ -19,9 +19,9 @@ def aeloss(x, o, args, distribution, beta=1, backward=False, reduction='sum'):
         return loss.item(), loss.item(), 0
     
     elif distribution == 'Uniform':
-        _, vq_e_loss, vq_commit_loss, _, K = args
-        if backward: return (loss + vq_e_loss + beta * vq_commit_loss)
-        else:        return (loss + vq_e_loss + beta * vq_commit_loss).item(), loss.item(), np.log(K)
+        _, vq_e_loss, beta_vq_commit_loss, _, K = args
+        if backward: return (loss + vq_e_loss + beta_vq_commit_loss)
+        else:        return (loss + vq_e_loss + beta_vq_commit_loss).item(), loss.item(), np.log(K)
 
     else: raise Exception('[ERROR] Unknown distribution.')
 
