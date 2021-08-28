@@ -11,6 +11,7 @@ parser.add_argument('--weight_decay', type=float, default=None)
 parser.add_argument('--heads', type=int, default=None)
 parser.add_argument('--vqbeta', type=float, default=None)
 parser.add_argument('--bottleneck', type=int, default=None)
+parser.add_argument('--latent', type=str, choices=['Unknown','Multi-Bernoulli','Uniform','Gaussian'], default=None)
 
 args = parser.parse_args()
 
@@ -34,6 +35,8 @@ if args.vqbeta is not None:
 if args.bottleneck is not None:
     params_file['model']['encoder']['layer2']['size'] = args.bottleneck
     params_file['model']['decoder']['layer0']['size'] = args.bottleneck
+if args.latent is not None:
+    params_file['model']['distribution'] = args.latent
     
 with open(OPATH, 'w') as f:
     yaml.dump(params_file, f)
