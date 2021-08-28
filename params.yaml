@@ -17,7 +17,7 @@ model:
   ## If [window-based] define window_cloning, otherwise leave it null.
   window_cloning: false
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
-  distribution: Uniform
+  distribution: Multi-Bernoulli
   ## Definition of Quantizer:  
   ## If distribution is [Uniform] define codebook_size.
   quantizer:
@@ -56,9 +56,9 @@ model:
       size: 1250
       dropout: 0.5
       normalize: true
-      activation: Tanh
+      activation: ReLU
     layer2: 
-      size: 2500
+      size: 250
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -67,7 +67,7 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 2500
+      size: 250
       dropout: 0.5
       normalize: true
       activation: ReLU
