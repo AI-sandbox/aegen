@@ -264,7 +264,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                         vd_metrics[f'vd_{p}_{kmetric}'].append(val)
             del aux_vd_metrics
             
-        if bool(vd_metrics['vd_residual_sparsity'][-1] < best_loss):
+        if bool(-vd_metrics['vd_zstd_ccratio_no_shuffle'][-1] < best_loss):
             saver(
                 obj='model', 
                 num=num, 
@@ -293,7 +293,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 }
             )
             best_epoch = epoch + 1
-            best_loss = vd_metrics['vd_residual_sparsity'][-1]
+            best_loss = -vd_metrics['vd_zstd_ccratio_no_shuffle'][-1]
             saver(
                 obj='stats',
                 num=num, 

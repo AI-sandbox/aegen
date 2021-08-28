@@ -3,7 +3,7 @@ import argparse
 
 def parse_bool(boolean):
     if isinstance(boolean, bool):
-       return keyword
+        return keyword
     if boolean.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
     elif boolean.lower() in ('no', 'false', 'f', 'n', '0'):
