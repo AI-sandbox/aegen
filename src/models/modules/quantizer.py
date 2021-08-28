@@ -73,7 +73,7 @@ class Quantizer(nn.Module):
         ## latent vectors.
         if self.latent_distribution == 'Multi-Bernoulli':
             zq = torch.ones(ze.shape).cuda()
-            zq[ze < 0] = -1
+            zq[ze < 0.5] = 0
             return zq
         ## In Uniform LS, the quantizer
         ## computes the distances to the

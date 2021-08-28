@@ -31,14 +31,15 @@ def to_numpy(x, z, r, distribution=None):
         if isinstance(x, np.ndarray): return x
         elif isinstance(x, torch.Tensor): return x.cpu().detach().numpy()
         
-    def _make01(z):
-        z = (z + 1) / 2
-        return z
+    #def _make01(z):
+    #    z = (z + 1) / 2
+    #    print(z)
+    #    return z
     
     x = _to_numpy(x).astype(bool)
     if (distribution == 'Gaussian') or (distribution == 'Unknown'): z = _to_numpy(z).astype(float)
     elif distribution == 'Uniform': z = _to_numpy(z).astype(np.dtype('B'))
-    else: z = _make01(_to_numpy(z)).astype(bool)
+    else: z = _to_numpy(z).astype(bool)
     r =  _to_numpy(r).astype(bool) 
     return x, z, r
 

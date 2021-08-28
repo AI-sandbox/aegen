@@ -41,9 +41,9 @@ class Encoder(nn.Module):
             self.heads = 1
 
         ## Check if activations are correct.                
-        if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Tanh'):
+        if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Sigmoid'):
             print(params[f'layer{depth - 2}']['activation'])
-            raise Exception('[ERROR] Missing tanh activation!')
+            raise Exception('[ERROR] Missing sigmoid activation!')
         if (self.latent_distribution == 'Gaussian') and (params[f'layer{depth - 1}']['activation'] != None):
             print('[WARNING] Activation for Mu and Logvar features is not the identity.')
             
