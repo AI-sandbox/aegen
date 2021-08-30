@@ -126,7 +126,17 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         for i, batch in enumerate(tr_loader if offline else batch_counter):
 
             if offline:
-                snps_array = batch[0].to(device)#.unsqueeze(1)
+                if (model['distribution'] == 'Uniform') and (model['window_train_mode'] == 'randomized'):
+                    snps_array = np.empty(batch[0].shape)
+                    ini_idx = np.random.randint(0, snps_array.shape[-1] - model['window_size'], snps_array.shape[0])
+                    end_idx = ini_idx + model['window_size']
+                    for i in range(snps_array.shape[0]):
+                        print(f'Selecting ({ini_idx[i]},{end_idx[i]})')
+                        snps_array[i,:] = batch[0][i,ini_idx[i]:end_idx[i]]
+                    snps_array = snps_array.to(device)
+                    print(snps_array.shape)
+                else:
+                    snps_array = batch[0].to(device)#.unsqueeze(1)
                 labels = batch[1].to(device) if model['conditional'] else None
             else: 
                 snps_array, labels = online_simulator.simulate(num_generation_max=hyperparams['training']['num_generation_max'])
@@ -270,11 +280,14 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 num=num, 
                 state={
                     'architecture': model['architecture'],
+                    'chm':model['chm'],
                     'shape':model['shape'],
                     'isize':model['isize'],
                     'bsize':model['bsize'],
                     'heads':model['heads'],
                     'window_size': model['window_size'],
+                    'window_cloning':model['window_cloning'],
+                    'window_train_mode':model['window_train_mode'],
                     'distribution': model['distribution'],
                     'conditional': model['conditional'],
                     'num_classes': model['num_classes'],
@@ -367,7 +380,15 @@ def validate(model, vd_loader, epoch, verbose, hyperparams, monitor=None, device
         for i, batch in enumerate(vd_loader if offline else batch_counter):
             
             if offline:
-                snps_array = batch[0].to(device)
+                if (model['distribution'] == 'Uniform') and (model['window_train_mode'] == 'randomized'):
+                    snps_array = np.empty(batch[0].shape)
+                    ini_idx = np.random.randint(0, snps_array.shape[-1] - model['window_size'], snps_array.shape[0])
+                    end_idx = ini_idx + model['window_size']
+                    for i in range(snps_array.shape[0]):
+                        snps_array[i,:] = batch[0][i,ini_idx[i]:end_idx[i]]
+                    snps_array = snps_array.to(device)
+                else:
+                    snps_array = batch[0].to(device)
                 labels = batch[1].to(device) if model['conditional'] else None
             else: 
                 snps_array, labels = simulator.simulate(num_generation_max=hyperparams['validation']['num_generation_max'])

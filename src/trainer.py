@@ -39,7 +39,7 @@ if __name__ == '__main__':
     species = model_params['species']
     chm = model_params['chm']
     arange = (model_params['arange']['ini'], model_params['arange']['end'])
-    ksize=model_params['encoder']['layer0']['size']
+    ksize = model_params['encoder']['layer0']['size']
     
     ## Data assertion.
     if int(ksize) != int(arange[1] - arange[0]):
@@ -176,7 +176,7 @@ if __name__ == '__main__':
                 lr=hyperparams['optimizer']['lr'], 
                 weight_decay=hyperparams['optimizer']['weight_decay'],
             )
-        # RuntimeError: SparseAdam does not support dense gradients, please consider Adam instead
+        # RuntimeError: SparseAdam does not support dense gradients, please consider Adam instead.
         elif hyperparams['optimizer']['algorithm'] == 'SparseAdam':
             raise Exception('[ERROR] SparseAdam does not support dense gradients, please consider Adam instead.')
             optimizer = torch.optim.SparseAdam(
@@ -216,7 +216,7 @@ if __name__ == '__main__':
                 lr=hyperparams['optimizer']['lr'],
                 betas=(0.9, 0.999),
                 eps=1e-8,
-                weight_decay=weight_hyperparams['optimizer']['weight_decay'],
+                weight_decay=hyperparams['optimizer']['weight_decay'],
             )
         else: raise Exception('Unknown optimization algorithm')
     else: raise Exception('Missing optimizer')
@@ -279,12 +279,12 @@ if __name__ == '__main__':
         'cratio_no_shuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': cratio_no_shuffle,
-            'params' : ['lz4', 'zlib', 'zstd']
+            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
         },
         'cratio_bitshuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
             'function': cratio_bitshuffle,
-            'params' : ['lz4', 'zlib', 'zstd']
+            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
         },
         'ccratio_no_shuffle' : {
             'inputs' : ['input', 'args', 'residual', 'distribution'],
@@ -329,13 +329,15 @@ if __name__ == '__main__':
     train(
         model={
             'architecture': model_params['shape'] + (' AE' if not model_params['conditioning']['using'] else ' C-AE'),
+            'chm':chm,
             'shape':model_params['shape'],
             'isize':model_params['encoder']['layer0']['size'],
             'bsize':model_params['decoder']['layer0']['size'],
             'window_size': model_params['window_size'] if model_params['shape'] == 'window-based' else None,
             'window_cloning': model_params['window_cloning'] if model_params['shape'] == 'window-based' else None,
+            'window_train_mode': model_params['window_train_mode'],
             'codebook_size': model_params['quantizer']['codebook_size'] if model_params['distribution'] == 'Uniform' else None,
-            'heads': model_params['quantizer']['multi_head']['features'] if (model_params['distribution'] == 'Uniform') and (model_params['quantizer']['multi_head']['using']) else None,
+            'heads': model_params['quantizer']['multi_head']['features'] if (model_params['distribution'] == 'Uniform') and (model_params['quantizer']['multi_head']['using']) else 1,
             'distribution': model_params['distribution'],
             'body': model, 
             'parallel': model_parallel,

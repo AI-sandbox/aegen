@@ -9,13 +9,21 @@ model:
   ## Segment of SNPs to process.
   arange:
      ini: 0
-     end: 10000
+     end: 316500
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
   window_size: 2500
   ## If [window-based] define window_cloning, otherwise leave it null.
   window_cloning: false
+  ## This mode is only compatible with [window_cloning] set to true.
+  ## [window_train_mode] admits 2 modes:
+  ## - [randomized]: a random window is taken from chromosome ([ini],[end]).
+  ##   This approach is useful for training on very long sequences, e.g., 
+  ##   whole chromosomes.  
+  ## - [sequential]: a unique window is slided through the sequence.
+  ##   Number of forward passes = ([end]-[ini])/[window_size].
+  window_train_mode: randomized
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
   distribution: Multi-Bernoulli
   ## Definition of Quantizer:  
@@ -48,7 +56,7 @@ model:
   ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 10000
+      size: 2500
       dropout: 0.5
       normalize: true
       activation: ReLU
@@ -77,7 +85,7 @@ model:
       normalize: true
       activation: Sigmoid
     layer2:
-      size: 10000
+      size: 2500
 
 ## Hyperparameters for training.
 hyperparams:
@@ -91,9 +99,9 @@ hyperparams:
       varloss: false
   ## Optimizer algorithm can be: [Adam, AdamW, RAdam, QHAdam, Yogi, DiffGrad].
   optimizer:
-       algorithm: AdamW
-       lr: 0.0025
-       weight_decay: 0.01
+       algorithm: QHAdam
+       lr: 0.25
+       weight_decay: 0.001
   ## Scheduler can be: [null, plateau, step, multistep, exponential].
   scheduler: 
        method: plateau
