@@ -40,6 +40,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         wandb_tags = []
         ## Filter by latent space distribution --
         wandb_tags.append(model['distribution'])
+        if model['distribution'] == 'Uniform': wandb_tags.append(f"heads {model['heads']}")
         ## Filter by conditioning --
         if model['conditional']: wandb_tags.append('conditional')
         ## Filter by shape
@@ -52,7 +53,9 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             if model['bsize']*model['isize']//model['window_size'] < 256: wandb_tags.append('small bsize')
             else: wandb_tags.append('large bsize')
             ## Filter by window cloning --
-            if model['window_cloning']: wandb_tags.append('cloning')
+            if model['window_cloning']: 
+                wandb_tags.append('cloning')
+                wandb_tags.append(model['window_train_mode'])
         else: wandb_tags.append(model['shape'])
         
         wandb.init(
