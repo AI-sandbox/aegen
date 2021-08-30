@@ -9,13 +9,13 @@ model:
   ## Segment of SNPs to process.
   arange:
      ini: 0
-     end: 316500
+     end: 157500
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
   window_size: 2500
   ## If [window-based] define window_cloning, otherwise leave it null.
-  window_cloning: false
+  window_cloning: true
   ## This mode is only compatible with [window_cloning] set to true.
   ## [window_train_mode] admits 2 modes:
   ## - [randomized]: a random window is taken from chromosome ([ini],[end]).
@@ -25,7 +25,7 @@ model:
   ##   Number of forward passes = ([end]-[ini])/[window_size].
   window_train_mode: randomized
   ## Distribution can be: [Unknown, Gaussian, Multi-Bernoulli, Uniform].
-  distribution: Multi-Bernoulli
+  distribution: Uniform
   ## Definition of Quantizer:  
   ## If distribution is [Uniform] define codebook_size.
   quantizer:
@@ -66,7 +66,7 @@ model:
       normalize: true
       activation: ReLU
     layer2: 
-      size: 250
+      size: 512
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -75,7 +75,7 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 250
+      size: 512
       dropout: 0.5
       normalize: true
       activation: ReLU

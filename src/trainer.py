@@ -54,8 +54,12 @@ if __name__ == '__main__':
     ksize = model_params['encoder']['layer0']['size']
     
     ## Data assertion.
-    if int(ksize) != int(arange[1] - arange[0]):
-        raise Exception('[ERROR] Input shape does not match SNPs segment length!')
+    if model_params['window_cloning'] and (model_params['window_train_mode'] == 'randomized'):
+        if int(ksize) != model_params['window_size']:
+             raise Exception('[ERROR] Input shape does not match SNPs segment length!')
+    else:   
+        if int(ksize) != int(arange[1] - arange[0]):
+            raise Exception('[ERROR] Input shape does not match SNPs segment length!')
     
     def summary_net(exp, species, chm, model_params, hyperparams):
         ## Conditioning.
@@ -97,6 +101,7 @@ if __name__ == '__main__':
     
     #======================== Prepare data ========================#
     system_info()
+    log.info(summary)
     IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chm}/prepared')
     
     ## TR data loader.
