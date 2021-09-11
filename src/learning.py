@@ -127,14 +127,13 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         epoch_metrics = create_metrics_dict(metrics, prefix='aux')
         
         for i, batch in enumerate(tr_loader if offline else batch_counter):
-
             if offline:
                 if (model['distribution'] == 'Uniform') and (model['window_train_mode'] == 'randomized'):
                     snps_array = np.empty((batch[0].shape[0],model['window_size']))
                     ini_idx = np.random.randint(0, batch[0].shape[-1] - model['window_size'], snps_array.shape[0])
                     end_idx = ini_idx + model['window_size']
-                    for i in range(snps_array.shape[0]):
-                        snps_array[i,:] = batch[0][i,ini_idx[i]:end_idx[i]]
+                    for j in range(snps_array.shape[0]):
+                        snps_array[j,:] = batch[0][j,ini_idx[j]:end_idx[j]]
                     snps_array = torch.from_numpy(snps_array).float().to(device)
                 else:
                     snps_array = batch[0].to(device)#.unsqueeze(1)
@@ -199,6 +198,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                                 except KeyError: pass 
                             inputs.append(p)
                             epoch_metrics[f'aux_{p}_{kmetric}'].append(meta['function'](*inputs))
+                            
             # Backpropagation.
             optimizer['body'].zero_grad()
             
@@ -275,7 +275,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                         vd_metrics[f'vd_{p}_{kmetric}'].append(val)
             del aux_vd_metrics
             
-        if bool(-vd_metrics['vd_zstd_ccratio_no_shuffle'][-1] < best_loss):
+        if bool(vd_metrics['vd_ae_loss'][-1] < best_loss):
             saver(
                 obj='model', 
                 num=num, 
@@ -307,7 +307,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 }
             )
             best_epoch = epoch + 1
-            best_loss = -vd_metrics['vd_zstd_ccratio_no_shuffle'][-1]
+            best_loss = vd_metrics['vd_ae_loss'][-1]
             saver(
                 obj='stats',
                 num=num, 
@@ -385,8 +385,8 @@ def validate(model, vd_loader, epoch, verbose, hyperparams, monitor=None, device
                     snps_array = np.empty((batch[0].shape[0],model['window_size']))
                     ini_idx = np.random.randint(0, batch[0].shape[-1] - model['window_size'], snps_array.shape[0])
                     end_idx = ini_idx + model['window_size']
-                    for i in range(snps_array.shape[0]):
-                        snps_array[i,:] = batch[0][i,ini_idx[i]:end_idx[i]]
+                    for j in range(snps_array.shape[0]):
+                        snps_array[j,:] = batch[0][j,ini_idx[j]:end_idx[j]]
                     snps_array = torch.from_numpy(snps_array).float().to(device)
                 else:
                     snps_array = batch[0].to(device)

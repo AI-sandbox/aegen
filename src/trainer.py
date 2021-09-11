@@ -81,6 +81,7 @@ if __name__ == '__main__':
                 W += f" Windows are shared and the training mode is {model_params['window_train_mode']}."
             else:
                 W += " Windows are independent."
+        else: W = ''
             
         layer_sizes = [str(model_params['encoder'][layer]['size']) for layer in model_params['encoder'].keys()]
 
@@ -318,26 +319,26 @@ if __name__ == '__main__':
         ## If the key is a metric name:
         ## Then define the inputs, the function,
         ## and the hyperparameters for the function.
-        'cratio_no_shuffle' : {
-            'inputs' : ['input', 'args', 'residual', 'distribution'],
-            'function': cratio_no_shuffle,
-            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
-        },
-        'cratio_bitshuffle' : {
-            'inputs' : ['input', 'args', 'residual', 'distribution'],
-            'function': cratio_bitshuffle,
-            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
-        },
-        'ccratio_no_shuffle' : {
-            'inputs' : ['input', 'args', 'residual', 'distribution'],
-            'function': ccratio_no_shuffle,
-            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
-        },
-        'ccratio_bitshuffle' : {
-            'inputs' : ['input', 'args', 'residual', 'distribution'],
-            'function': ccratio_bitshuffle,
-            'params' : ['zstd']#['lz4', 'zlib', 'zstd']
-        },
+        #'cratio_no_shuffle' : {
+        #    'inputs' : ['input', 'args', 'residual', 'distribution'],
+        #    'function': cratio_no_shuffle,
+        #    'params' : ['zstd']#['lz4', 'zlib', 'zstd']
+        #},
+        #'cratio_bitshuffle' : {
+        #    'inputs' : ['input', 'args', 'residual', 'distribution'],
+        #    'function': cratio_bitshuffle,
+        #    'params' : ['zstd']#['lz4', 'zlib', 'zstd']
+        #},
+        #'ccratio_no_shuffle' : {
+        #    'inputs' : ['input', 'args', 'residual', 'distribution'],
+        #    'function': ccratio_no_shuffle,
+        #    'params' : ['zstd']#['lz4', 'zlib', 'zstd']
+        #},
+        #'ccratio_bitshuffle' : {
+        #    'inputs' : ['input', 'args', 'residual', 'distribution'],
+        #    'function': ccratio_bitshuffle,
+        #    'params' : ['zstd']#['lz4', 'zlib', 'zstd']
+        #},
         #'partial_embedding_ccratio_no_shuffle' : {
         #    'inputs' : ['input', 'mu', 'residual', 'distribution'],
         #    'function': partial_embedding_ccratio_no_shuffle,

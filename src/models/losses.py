@@ -11,6 +11,7 @@ def aeloss(x, o, args, distribution, beta=1, backward=False, reduction='mean'):
     if distribution == 'Gaussian':
         mu, logvar = args
         mu, logvar = mu.float(), logvar.float()
+        KL_divergence = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         if backward: return (loss +  beta * KL_divergence)
         else:        return (loss +  beta * KL_divergence).item(), loss.item(), KL_divergence.item()
     

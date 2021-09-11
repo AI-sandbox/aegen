@@ -39,6 +39,7 @@ class Encoder(nn.Module):
         if (self.latent_distribution != 'Uniform') and self.heads > 1:
             print('[WARNING] Multi-head for non VQ. Ignoring multi-head requirement.')
             self.heads = 1
+        else: print(f'[WARNING] Using {self.heads} head(s).')
 
         ## Check if activations are correct.                
         if (self.latent_distribution == 'Multi-Bernoulli') and (params[f'layer{depth - 1}']['activation'] != 'Sigmoid'):

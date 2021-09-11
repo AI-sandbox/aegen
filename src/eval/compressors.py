@@ -51,7 +51,8 @@ class Compressor(ABC):
     ## [bsize] is the bottleneck size (the size of the latent representation
     ## of the compressed data).
     ## [latent_type] is the data type of the latent factors.
-    def __init__(self, experiment):
+    def __init__(self, experiment, chm=22):
+        self.chm = chm
         self.ae, self.stats = load_model(experiment)
         self.distribution = self.stats['distribution']
         self.isize = self.stats['isize']
@@ -168,9 +169,21 @@ class LZAE(Compressor):
             f.write(latent)
             f.close()
             
+            commands =  f'--input generic --force -o /tmp/z.genozip {save_z}'
+            execute = os.path.join(os.environ.get('GENOZIP_PATH'), f'genozip {commands}')
+            print(execute)
+            proc = subprocess.Popen(shlex.split(execute), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc.wait()
+            
             f = open(save_r, 'wb')
             f.write(residual)
             f.close()
+            
+            commands =  f'--input generic --force -o /tmp/r.genozip {save_r}'
+            execute = os.path.join(os.environ.get('GENOZIP_PATH'), f'genozip {commands}')
+            print(execute)
+            proc = subprocess.Popen(shlex.split(execute), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc.wait()
         
         else: 
             zcom = self.bitencode(zbin, typesize=elem_tsize(latent), algorithm=algorithm, shuffle=shuffle)
@@ -182,29 +195,31 @@ class LZAE(Compressor):
                 f = open(save_z, 'wb')
                 f.write(zcom)
                 f.close()
+                print(f'Latent z stored at {save_z}')
 
             ## Save compressed residual, if desired.
             if save_r is not None:
                 f = open(save_r, 'wb')
                 f.write(rcom)
                 f.close()
+                print(f'Residual z stored at {save_r}')
 
-        if verbose:
-            cfactor = len(xbin) / (len(zcom) + len(rcom))
-            
-            xcom = self.bitencode(xbin, typesize=1, algorithm=algorithm, shuffle=shuffle)
-            print(f'Compressed size of raw data: {len(xcom)} bytes.') 
-            
-            ccfactor = len(xcom) / (len(zcom) + len(rcom))
-        
-            print(f'Compressed latent representation bytes: {len(zcom)}.')
-            print(f'Compressed residual bytes: {len(rcom)}.')
-            print(f'Compressed size of ae-processed data: {len(zcom) + len(rcom)} bytes.')
-            print('='*50)
-            print(f'Compression ratio: {np.round(1/cfactor, 2)}.')
-            print(f'Compression factor: x{np.round(cfactor, 2)}.')
-            print(f'CC factor: x{np.round(ccfactor, 2)}.')
-            print('='*50)
+            if verbose:
+                cfactor = len(xbin) / (len(zcom) + len(rcom))
+
+                xcom = self.bitencode(xbin, typesize=1, algorithm=algorithm, shuffle=shuffle)
+                print(f'Compressed size of raw data: {len(xcom)} bytes.') 
+
+                ccfactor = len(xcom) / (len(zcom) + len(rcom))
+
+                print(f'Compressed latent representation bytes: {len(zcom)}.')
+                print(f'Compressed residual bytes: {len(rcom)}.')
+                print(f'Compressed size of ae-processed data: {len(zcom) + len(rcom)} bytes.')
+                print('='*50)
+                print(f'Compression ratio: {np.round(1/cfactor, 2)}.')
+                print(f'Compression factor: x{np.round(cfactor, 2)}.')
+                print(f'CC factor: x{np.round(ccfactor, 2)}.')
+                print('='*50)
         
         if algorithm != 'genozip': return zcom, rcom        
     
@@ -214,9 +229,7 @@ class LZAE(Compressor):
     ## the data to be decompressed.
     ## [batch_size] defines the size of the batches to be processed.
     ## Depending on the capabilities of the GPU, the batch size can be increased.
-    def decompress(self, zcom, rcom, batch_size=512):
-        zbin = blosc.decompress(zcom)
-        rbin = blosc.decompress(rcom)
+    def decompress(self, zbin, rbin, batch_size=512):
         
         if self.distribution == 'Uniform':
             indices = torch.from_numpy(np.frombuffer(zbin, dtype=self.latent_type).reshape(-1,self.heads,int(self.isize/self.wsize))).cuda().long()
@@ -259,16 +272,45 @@ class LZAE(Compressor):
     ## [batch_size] defines the size of the batches to be processed.
     ## Depending on the capabilities of the GPU, the batch size can be increased.
     def decompress_from_files(self, zcom_path, rcom_path, batch_size=512):
-        ## Read compressed latent representation.
-        f = open(zcom_path, 'r')
-        zcom = f.read()
-        f.close()
-        ## Read compressed residual.
-        f = open(rcom_path, 'r')
-        rcom = f.read()
-        f.close()
         
-        return self.decompress(zcom, rcom, batch_size=batch_size)
+        if zcom_path.endswith('.genozip'):
+            commands =  f'--force -o /tmp/z_unzipped.bytes {zcom_path}'
+            execute = os.path.join(os.environ.get('GENOZIP_PATH'), f'genounzip {commands}')
+            print(execute)
+            proc = subprocess.Popen(shlex.split(execute), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc.wait()
+            
+            ## Read compressed latent representation.
+            f = open('/tmp/z_unzipped.bytes', 'rb')
+            zbin = f.read()
+            f.close()    
+        else:
+            ## Read compressed latent representation.
+            f = open(zcom_path, 'rb')
+            zcom = f.read()
+            f.close()
+            
+            zbin = blosc.decompress(zcom)
+        
+        if rcom_path.endswith('.genozip'):
+            commands =  f'--force -o /tmp/r_unzipped.bytes {rcom_path}'
+            execute = os.path.join(os.environ.get('GENOZIP_PATH'), f'genounzip {commands}')
+            print(execute)
+            proc = subprocess.Popen(shlex.split(execute), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc.wait()
+            
+            ## Read compressed latent representation.
+            f = open('/tmp/r_unzipped.bytes', 'rb')
+            rbin = f.read()
+            f.close()
+        else:
+            ## Read compressed residual.
+            f = open(rcom_path, 'rb')
+            rcom = f.read()
+            f.close()
+            rbin = blosc.decompress(rcom)
+        
+        return self.decompress(zbin, rbin, batch_size=batch_size)
     
     ## Benchmark test with [algorithms]. Computes the improvement over [algorithms]
     ## by adding the autoencoder into the compression pipeline.
@@ -299,7 +341,7 @@ class LZAE(Compressor):
             print(f'Encoding into bytes with {algorithm} algorithm...')
             if algorithm == 'genozip':
                 
-                commands =  f'--input generic --force -o /tmp/bench_x.genozip {path(22, 0, self.isize)}'
+                commands =  f'--input generic --force -o /tmp/bench_x.genozip {path(self.chm, 0, self.isize)}'
                 execute = os.path.join(os.environ.get('GENOZIP_PATH'), f'genozip {commands}')
                 print(execute)
                 proc = subprocess.Popen(shlex.split(execute), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -326,7 +368,7 @@ class LZAE(Compressor):
                 lenxcom = bytes_disk('bench_x.genozip')
                 lenzcom = bytes_disk('bench_z.genozip')
                 lenrcom = bytes_disk('bench_r.genozip')   
-  
+
             else:
                 lenxcom = len(self.bitencode(xbin, typesize=1, algorithm=algorithm, shuffle=shuffle))
                 lenzcom = len(self.bitencode(zbin, typesize=elem_tsize(latent), algorithm=algorithm, shuffle=shuffle))
@@ -335,10 +377,10 @@ class LZAE(Compressor):
             algcfactor = len(xbin) / lenxcom
             aecfactor = len(xbin) / (lenzcom + lenrcom)
             aeccfactor = lenxcom / (lenzcom + lenrcom)
-                
+
             benchlist.append([algorithm, len(xbin), len(zbin), 
-                              len(rbin), lenxcom, lenzcom, lenrcom, 
-                              algcfactor, aecfactor, aeccfactor])
+                          len(rbin), lenxcom, lenzcom, lenrcom, 
+                          algcfactor, aecfactor, aeccfactor])
         end = time.time()
         print(f'Benchmark results ready. Total time: {np.round(end - ini, 4)}s')
         benchres = pd.DataFrame(benchlist, columns=['algorithm', 'xbytes', 'zbytes', 'rbytes', 
