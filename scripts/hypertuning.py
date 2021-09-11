@@ -25,6 +25,7 @@ parser.add_argument('--latent', type=str, choices=['Unknown','Multi-Bernoulli','
 parser.add_argument('--isize', type=int, default=None)
 parser.add_argument('--chm', type=int, default=None)
 parser.add_argument('--winshare', type=bool, default=None)
+parser.add_argument('--only', type=int, default=None)
 
 args = parser.parse_args()
 
@@ -58,6 +59,8 @@ if args.chm is not None:
     params_file['model']['chm'] = args.chm
 if args.winshare is not None: 
     params_file['model']['window_cloning'] = args.winshare   
+if args.only is not None: 
+    params_file['model']['conditioning']['only'] = args.only   
     
 with open(OPATH, 'w') as f:
     yaml.dump(params_file, f)

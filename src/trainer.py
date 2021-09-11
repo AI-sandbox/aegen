@@ -105,6 +105,16 @@ if __name__ == '__main__':
     log.info(summary)
     IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chm}/prepared')
     
+    if model_params['conditioning']['using'] and (model_params['conditioning']['only'] is not None):
+        conditional = False
+        only = model_params['conditioning']['only']
+    elif model_params['conditioning']['using'] and model_params['conditioning'] is None: 
+        conditional = True
+        only = None
+    else:
+        conditional = False
+        only = None
+    
     ## TR data loader.
     if hyperparams['training']['simulation'] == 'offline':
         log.info('-- USING OFFLINE SIMULATION FOR TR DATA --')
@@ -115,8 +125,8 @@ if __name__ == '__main__':
             batch_size=hyperparams['batch_size'], 
             split_set='train',
             arange=arange,
-            only=args.only,
-            conditional=model_params['conditioning']['using'],
+            only=only,
+            conditional=conditional,
         )
         log.info(f'TR data loaded.')
         log.info(f"Training set of shape <= {len(tr_loader) * hyperparams['batch_size']}")
@@ -134,8 +144,8 @@ if __name__ == '__main__':
             batch_size=hyperparams['batch_size'], 
             split_set='valid',
             arange=arange,
-            only=args.only,
-            conditional=model_params['conditioning']['using']
+            only=only,
+            conditional=conditional
         )
         log.info(f'VD data loaded.')
         log.info(f"Validation set of shape <= {len(vd_loader) * hyperparams['batch_size']}")
@@ -154,8 +164,8 @@ if __name__ == '__main__':
                 batch_size=hyperparams['batch_size'], 
                 split_set='test',
                 arange=arange,
-                only=args.only,
-                conditional=model_params['conditioning']['using']
+                only=only,
+                conditional=conditional
             )
             log.info(f'TS data loaded.')
             log.info(f"Test set of shape <= {len(ts_loader) * hyperparams['batch_size']}")
@@ -180,11 +190,11 @@ if __name__ == '__main__':
     #======================== Prepare model ========================#
     model = aegen(
         params=model_params, 
-        conditional=model_params['conditioning']['using'],
+        conditional=conditional,
         imputation=model_params['denoising']['using'],
         sample_mode=False,
     )
-
+    
     model_parallel = False
     if torch.cuda.is_available():
         log.info(f"System has {torch.cuda.device_count()} available GPU(s)")
@@ -205,6 +215,7 @@ if __name__ == '__main__':
     system_info()
     log.info(model)
     log.info('Model ready ++')
+    log.info(f'Model is conditional: {conditional}')
     #======================== Prepare optimizer ========================#
     if hyperparams['optimizer'] is not None:
         if hyperparams['optimizer']['algorithm'] == 'Adam':
@@ -385,7 +396,7 @@ if __name__ == '__main__':
             'body': model, 
             'parallel': model_parallel,
             'num_params': num_params,
-            'conditional': model_params['conditioning']['using'],
+            'conditional': conditional,
             'num_classes': model_params['conditioning']['num_classes'],
             'imputation': model_params['denoising']['using'],
             'gpu': torch.cuda.get_device_name(),
@@ -414,7 +425,7 @@ if __name__ == '__main__':
         },
         summary=summary,
         num=args.num,
-        only=args.only,
+        only=only,
         monitor=hyperparams['training']['monitor'],
         metrics=metrics
     )

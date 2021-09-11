@@ -24,8 +24,6 @@ touch $OUT_PATH/experiments/exp$experiment/exp$experiment.log
 chmod +rwx $OUT_PATH/experiments/exp$experiment/exp$experiment.log
 
 if CUDA_VISIBLE_DEVICES=$device python3 $USER_PATH/src/trainer.py \
---species human \
---chr 20 \
 --params $OUT_PATH/experiments/exp$experiment/params.yaml \
 --num $experiment \
 --verbose False \

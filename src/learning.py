@@ -295,7 +295,8 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                     'imputation': model['imputation'],
                     'parallel': model['parallel'],
                     'num_params': model['num_params'],
-                    'weights': model['body'].state_dict()
+                    'weights': model['body'].state_dict(),
+                    'only' : only,
                 }
             )
             saver(
