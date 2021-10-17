@@ -108,7 +108,7 @@ if __name__ == '__main__':
     if model_params['conditioning']['using'] and (model_params['conditioning']['only'] is not None):
         conditional = False
         only = model_params['conditioning']['only']
-    elif model_params['conditioning']['using'] and model_params['conditioning'] is None: 
+    elif model_params['conditioning']['using'] and (model_params['conditioning']['only'] is None): 
         conditional = True
         only = None
     else:

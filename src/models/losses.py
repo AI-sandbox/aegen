@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def aeloss(x, o, args, distribution, beta=1, backward=False, reduction='mean'):
+def aeloss(x, o, args, distribution, beta=1, backward=False, reduction='sum'):
     
     x, o = x.float(), o.float()
     loss = F.binary_cross_entropy(o, x, reduction=reduction)
