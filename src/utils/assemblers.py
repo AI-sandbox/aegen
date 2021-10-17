@@ -152,7 +152,16 @@ def holdout_by_pop(snps, populations, *ratios, seed=123, verbose=True):
 
 def get_snps_by_pop(pop, split, species, chm, arange=(0,-1), max_gen=None):
     log.info(f'Fetching SNPs for population {pop}')
-    for i, snps_arr in enumerate(glob.glob(os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chm}/prepared/{split}/{pop}/generations/{pop}_gen_*.npy'))):
+    pops = np.array(['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS'])
+    pop_idx = np.where(pops == pop)[0][0]
+    
+    if isinstance(chm, int):
+        path = glob.glob(os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chm}/prepared/{split}/{pop}/generations/{pop}_gen_*.npy'))
+    elif chm == 'all':
+        path = glob.glob(os.path.join(os.environ.get('IN_PATH'), f'data/{species}/allchm/prepared/{split}_{pop_idx}/mat_vcf_2d.npy'))
+        print(path)
+    else: raise Exception('Unknown path.')
+    for i, snps_arr in enumerate(path):
         if max_gen is not None and i + 1 >= max_gen: break
         else:
             aux = np.load(snps_arr, mmap_mode='r+')[:,arange[0]:arange[1]].astype(bool)
@@ -167,6 +176,7 @@ def get_snps_by_pop(pop, split, species, chm, arange=(0,-1), max_gen=None):
 
 def create_dataset(species, chm, arange=(0,-1), split='test', max_gen=None, seed=123):
     pops = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
+    assert isinstance(chm, int) or (split != 'train' and chm == 'all')
     
     for i in range(1, len(pops)):
         if i == 1:
@@ -183,7 +193,12 @@ def create_dataset(species, chm, arange=(0,-1), split='test', max_gen=None, seed
     X, Y = X[idxs], Y[idxs]
         
     log.info(f'Storing {split} hdf5 of shape ({X.shape})...')
-    h5f = h5py.File(os.path.join(os.environ.get('OUT_PATH'),f'data/{species}/chr{chm}/prepared/{split}/{split}{int(arange[1]-arange[0])}_{arange[0]}_{arange[1]}.h5'), 'w')
+    if isinstance(chm, int):
+        opath=os.path.join(os.environ.get('OUT_PATH'),f'data/{species}/chr{chm}/prepared/{split}/{split}{int(arange[1]-arange[0])}_{arange[0]}_{arange[1]}.h5')
+    elif chm == 'all':
+        opath=os.path.join(os.environ.get('OUT_PATH'),f'data/{species}/allchm/prepared/{split}/{split}{int(arange[1]-arange[0])}_{arange[0]}_{arange[1]}.h5')
+    else: raise Exception('Unknown output path.')
+    h5f = h5py.File(opath, 'w')
     h5f.create_dataset('snps', data=X.astype(bool), dtype=np.dtype('bool'))
     h5f.create_dataset('populations', data=Y.astype('uint8'), dtype=np.dtype('uint8'))
     h5f.close()
