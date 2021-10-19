@@ -9,10 +9,10 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 class OnlineSimulator:
-    def __init__(self, batch_size, n_populations, mode='uniform', device='cpu', species='human', chr=22, split='train', balanced=True):
+    def __init__(self, batch_size, n_populations, mode='uniform', device='cpu', species='human', chm=22, split='train', balanced=True):
         ## Hyperparams set by user.
         self.species = species
-        self.chr = chr
+        self.chm = chm
         self.split = split
         self.batch_size = batch_size
         self.n_populations = n_populations
@@ -23,9 +23,15 @@ class OnlineSimulator:
         
         ## Pre-defined paths.
         self.reference_panel_path = os.path.join(os.environ.get('IN_PATH'),f'data/{self.species}/reference_panel_metadata_v2.tsv')
-        self.vcf_file_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/chr{self.chr}/ref_final_beagle_phased_1kg_hgdp_sgdp_chr{self.chr}_hg19.vcf')
         self.genetic_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchrs.b37.gmap')
-        sample_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/maps')
+        
+        if isinstance(self.chm, int):
+            self.vcf_file_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/chr{self.chm}/ref_final_beagle_phased_1kg_hgdp_sgdp_chr{self.chm}_hg19.vcf')
+            self.sample_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/maps')
+        elif isinstance(self.chm, str) and self.chm == 'all':
+            self.vcf_file_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchm/whole_filt_ld_single.vcf')
+            self.sample_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchm/prepared/{self.split}/sample.map')
+        else: raise Exception('Unknown chromosome.')
         
         ## Prepare ancestry list.
         ## Generate single ancestry sample maps for species.
@@ -42,24 +48,33 @@ class OnlineSimulator:
         return ref_panel_metadata['Superpopulation code'].unique()
     
     def _load_map_file(self):
-        self.mapfiles = {}
-        ## Store sample map files in dictionary.
-        for i, ancestry in enumerate(self.ancestries):
-            sample_map = pd.read_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{self.species}/chr{self.chr}/prepared/{self.split}/{ancestry}/{ancestry}.map'), sep="\t", header=None, index_col=False)
+        if isinstance(self.chm, int):
+            self.mapfiles = {}
+            ## Store sample map files in dictionary.
+            for i, ancestry in enumerate(self.ancestries):
+                sample_map = pd.read_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{self.species}/chr{self.chm}/prepared/{self.split}/{ancestry}/{ancestry}.map'), sep="\t", header=None, index_col=False)
+                sample_map.columns = ["sample", "ancestry"]
+                self.mapfiles[ancestry] = {
+                    'id' : i,
+                    'samples' : sample_map['sample'],
+                }
+        elif isinstance(self.chm, str) and self.chm == 'all':
+            sample_map = pd.read_csv(self.sample_map_path, sep="\t", header=None, index_col=False)
             sample_map.columns = ["sample", "ancestry"]
-            self.mapfiles[ancestry] = {
-                'id' : i,
-                'samples' : sample_map['sample'],
-            }
+            self.mapfile = sample_map
 
     def _load_vcf_samples_in_maps(self):
         ## Concat all available sample names.
         self.samples, self.labels = [], []#, self.ancestry_labels, self.ancestry_names = [], [], []
-        for k,v in self.mapfiles.items():
-            self.samples += v['samples'].tolist()
-            self.labels += (len(v['samples']) * [v['id']])
-            #self.ancestry_labels += v['ancestry_labels'].tolist()
-            #self.ancestry_names += v['ancestry_names'].tolist()
+        if isinstance(self.chm, int):
+            for k,v in self.mapfiles.items():
+                self.samples += v['samples'].tolist()
+                self.labels += (len(v['samples']) * [v['id']])
+                #self.ancestry_labels += v['ancestry_labels'].tolist()
+                #self.ancestry_names += v['ancestry_names'].tolist()
+        elif isinstance(self.chm, str) and self.chm == 'all':
+            self.samples = self.mapfile['sample']
+            self.labels = self.mapfile['ancestry']
         self.samples = np.asarray(self.samples)
         self.labels = np.asarray(self.labels)
         #self.ancestry_names = np.asarray(self.ancestry_names)
@@ -143,9 +158,9 @@ class OnlineSimulator:
             split_point_list = torch.randint(num_snps, (int(num_generation*switch_per_generation),))  
 
         ## else if chr number is available, a hardcoded cM (for humans) is used.
-        elif (self.chr is not None) and self.species == 'human':
+        elif (self.chm is not None) and self.species == 'human':
             cM_list = [286.279234, 268.839622, 223.361095, 214.688476, 204.089357, 192.039918, 187.2205, 168.003442, 166.359329, 181.144008, 158.21865, 174.679023, 125.706316, 120.202583, 141.860238, 134.037726, 128.490529, 117.708923, 107.733846, 108.266934, 62.786478, 74.109562]
-            switch_per_generation = cM_list[(int(self.chr)-1)]/100
+            switch_per_generation = cM_list[(int(self.chm)-1)]/100
             split_point_list = torch.randint(num_snps, (int(num_generation*switch_per_generation),))  
 
         ## else 1 switch per generation is used.
