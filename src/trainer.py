@@ -103,7 +103,11 @@ if __name__ == '__main__':
     #======================== Prepare data ========================#
     system_info()
     log.info(summary)
-    IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chm}/prepared')
+    if isinstance(chm, int):
+        IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{species}/chr{chm}/prepared')
+    elif isinstance(chm, str) and chm == 'all':
+        IPATH = os.path.join(os.environ.get('IN_PATH'), f'data/{species}/allchm/prepared')
+    else: raise Exception('Wrong chromosome.')
     
     if model_params['conditioning']['using'] and (model_params['conditioning']['only'] is not None):
         conditional = False

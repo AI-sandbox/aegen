@@ -26,7 +26,7 @@ chmod +rwx $OUT_PATH/experiments/exp$experiment/exp$experiment.log
 if CUDA_VISIBLE_DEVICES=$device python3 $USER_PATH/src/trainer.py \
 --params $OUT_PATH/experiments/exp$experiment/params.yaml \
 --num $experiment \
---verbose False \
+--verbose True \
 --evolution False;
 then echo "[$CLUSTER] Success!"
 else echo "[$CLUSTER] Fail!"; fi

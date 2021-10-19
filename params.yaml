@@ -5,11 +5,11 @@ model:
   ## Model trained on species:
   species: human
   ## Model trained on chromosome:
-  chm: 22
+  chm: all
   ## Segment of SNPs to process.
   arange:
      ini: 0
-     end: 10000
+     end: 839628
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
@@ -42,8 +42,9 @@ model:
           features: 1
   ## If model is conditioned define number of classes.
   conditioning:
-      using: true
+      using: false
       num_classes: 7
+      only: 0
   ## If denoising mode is turned on.
   denoising:
       using: false
@@ -56,17 +57,22 @@ model:
   ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 10000
-      dropout: 0.5
+      size: 839628
+      dropout: 0
       normalize: true
       activation: ReLU
     layer1:
       size: 512
-      dropout: 0.5
+      dropout: 0
+      normalize: true
+      activation: ReLU
+    layer2:
+      size: 64
+      dropout: 0
       normalize: true
       activation: null
-    layer2: 
-      size: 64
+    layer3: 
+      size: 2
   ## Architecture of Decoder:
   ## Layers must be numbered sequentially (0,1,2,...).
   ## Layers must have the following parameters: [size, dropout, normalize, activation].
@@ -75,21 +81,26 @@ model:
   ## The last layer has only one parameter: [size].
   decoder: 
     layer0:
-      size: 64
-      dropout: 0.5
+      size: 2
+      dropout: 0
       normalize: true
       activation: ReLU
     layer1:
+      size: 64
+      dropout: 0
+      normalize: true
+      activation: ReLU
+    layer2:
       size: 512
-      dropout: 0.5
+      dropout: 0
       normalize: true
       activation: Sigmoid
-    layer2:
-      size: 10000
+    layer3:
+      size: 839628
 
 ## Hyperparameters for training.
 hyperparams:
-  epochs: 150
+  epochs: 2000
   batch_size: 512
   slide: 15
   loss:
@@ -99,7 +110,7 @@ hyperparams:
       varloss: false
   ## Optimizer algorithm can be: [Adam, AdamW, RAdam, QHAdam, Yogi, DiffGrad].
   optimizer:
-       algorithm: AdamW
+       algorithm: QHAdam
        lr: 0.001
        weight_decay: 0.0001
   ## Scheduler can be: [null, plateau, step, multistep, exponential].
@@ -116,7 +127,7 @@ hyperparams:
   ## In [offline] simulation [n_batches, device, mode] are neglected.
   ## [mode] can be [uniform, exponential, pre-defined, fix].
   training:
-       simulation: offline
+       simulation: online
        num_generation_max: 400
        n_batches: 5
        device: cuda
@@ -126,7 +137,7 @@ hyperparams:
   ## VD simulation can be: [offline].
   ## [offline] loads a dataset from disk.
   validation:
-       simulation: offline
+       simulation: online
        num_generation_max: 400
        n_batches: 1
        device: cuda

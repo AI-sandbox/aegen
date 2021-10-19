@@ -38,6 +38,8 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         
         ## Automate tag creation on run launch:
         wandb_tags = []
+        ## Filer by chm --
+        wandb_tags.append(f'chm {model["chm"]}')
         ## Filter by latent space distribution --
         wandb_tags.append(model['distribution'])
         if model['distribution'] == 'Uniform': wandb_tags.append(f"heads {model['heads']}")
@@ -101,6 +103,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         if  hyperparams['validation']['simulation'] == 'offline':
             assert(model['num_classes'] == metadata['vd_metadata']['n_populations'])
         online_simulator = OnlineSimulator(
+            chm = model['chm'],
             batch_size = hyperparams['batch_size'],
             n_populations = model['num_classes'],
             mode = hyperparams['training']['mode'],
