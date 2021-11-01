@@ -65,7 +65,7 @@ class OnlineSimulator:
             sample_map.columns = ["sample", "ancestry"]
             self.mapfile = sample_map
 
-    def _load_vcf_samples_in_maps(self, single=0):
+    def _load_vcf_samples_in_maps(self):
         ## Concat all available sample names.
         self.samples, self.labels = [], []#, self.ancestry_labels, self.ancestry_names = [], [], []
         if isinstance(self.chm, int):
@@ -76,18 +76,18 @@ class OnlineSimulator:
             self.samples = self.mapfile['sample'].values
             self.labels = self.mapfile['ancestry'].values
             
-            metadata = pd.read_csv(self.reference_panel_path, sep="\t", header=0)
-            for i, sample in enumerate(self.samples):
-                print(f'Sample {sample} has label {self.labels[i]} and is of ancestry {metadata[metadata["Sample"] == sample]["Superpopulation code"].values[0]}')
-            print('\n\n\n\n')
-            idx = np.where(self.labels == 3)[0]
-            self.samples = self.samples[idx]
-            self.labels = self.labels[idx]
-            for i, sample in enumerate(self.samples):
-                print(f'Sample {sample} has label {self.labels[i]} and is of ancestry {metadata[metadata["Sample"] == sample]["Superpopulation code"].values[0]}')
+            #metadata = pd.read_csv(self.reference_panel_path, sep="\t", header=0)
+            #for i, sample in enumerate(self.samples):
+            #    print(f'Sample {sample} has label {self.labels[i]} and is of ancestry {metadata[metadata["Sample"] == sample]["Superpopulation code"].values[0]}')
+            #print('\n\n\n\n')
+            #idx = np.where(self.labels == 3)[0]
+            #self.samples = self.samples[idx]
+            #self.labels = self.labels[idx]
+            #for i, sample in enumerate(self.samples):
+            #    print(f'Sample {sample} has label {self.labels[i]} and is of ancestry {metadata[metadata["Sample"] == sample]["Superpopulation code"].values[0]}')
             
-            print(self.samples)
-            print("Unique: ", np.unique(self.labels))
+            #print(self.samples)
+            #print("Unique: ", np.unique(self.labels))
             
         self.samples = np.asarray(self.samples)
         self.labels = np.asarray(self.labels)
