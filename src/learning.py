@@ -108,18 +108,23 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
             n_populations = model['num_classes'],
             mode = hyperparams['training']['mode'],
             balanced = hyperparams['training']['balanced'],
-            device = hyperparams['training']['device']
+            device = hyperparams['training']['device'],
+            save_vcf_pointer = True
         )
         log.info('Online simulation for TR initialized.')
     else: raise Exception('Simulation can be either [online, offline].')
     if hyperparams['validation']['simulation'] == 'online':
         log.info('Initializating VD online simulator...')
         online_simulator_vd = OnlineSimulator(
+            chm = model['chm'],
             batch_size = hyperparams['batch_size'],
             n_populations = model['num_classes'],
             mode = hyperparams['validation']['mode'],
             balanced = hyperparams['validation']['balanced'],
-            device = hyperparams['validation']['device']
+            device = hyperparams['validation']['device'],
+            save_vcf_pointer = False,
+            preloaded_data_pointer = online_simulator.vcf_data if \
+                hyperparams['training']['simulation'] == 'online' else None
         )
         log.info('Online simulation for VD initialized.')
     #======================== Start training loop ========================#

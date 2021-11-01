@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 class OnlineSimulator:
-    def __init__(self, batch_size, n_populations, mode='uniform', device='cpu', species='human', chm=22, split='train', balanced=True):
+    def __init__(self, batch_size, n_populations, mode='uniform', device='cpu', species='human', chm=22, split='train', balanced=True, save_vcf_pointer=False, preloaded_data_pointer=None):
         ## Hyperparams set by user.
         self.species = species
         self.chm = chm
@@ -20,6 +20,8 @@ class OnlineSimulator:
         self.device = device
         self.single_ancestry = (n_populations is not None)
         self.balanced = balanced
+        self.save_vcf_pointer = save_vcf_pointer
+        self.preloaded_data_pointer = preloaded_data_pointer
         
         ## Pre-defined paths.
         self.reference_panel_path = os.path.join(os.environ.get('IN_PATH'),f'data/{self.species}/reference_panel_metadata_v2.tsv')
@@ -63,30 +65,57 @@ class OnlineSimulator:
             sample_map.columns = ["sample", "ancestry"]
             self.mapfile = sample_map
 
-    def _load_vcf_samples_in_maps(self):
+    def _load_vcf_samples_in_maps(self, single=0):
         ## Concat all available sample names.
         self.samples, self.labels = [], []#, self.ancestry_labels, self.ancestry_names = [], [], []
         if isinstance(self.chm, int):
             for k,v in self.mapfiles.items():
                 self.samples += v['samples'].tolist()
                 self.labels += (len(v['samples']) * [v['id']])
-                #self.ancestry_labels += v['ancestry_labels'].tolist()
-                #self.ancestry_names += v['ancestry_names'].tolist()
         elif isinstance(self.chm, str) and self.chm == 'all':
-            self.samples = self.mapfile['sample']
-            self.labels = self.mapfile['ancestry']
+            self.samples = self.mapfile['sample'].values
+            self.labels = self.mapfile['ancestry'].values
+            
+            metadata = pd.read_csv(self.reference_panel_path, sep="\t", header=0)
+            for i, sample in enumerate(self.samples):
+                print(f'Sample {sample} has label {self.labels[i]} and is of ancestry {metadata[metadata["Sample"] == sample]["Superpopulation code"].values[0]}')
+            print('\n\n\n\n')
+            idx = np.where(self.labels == 3)[0]
+            self.samples = self.samples[idx]
+            self.labels = self.labels[idx]
+            for i, sample in enumerate(self.samples):
+                print(f'Sample {sample} has label {self.labels[i]} and is of ancestry {metadata[metadata["Sample"] == sample]["Superpopulation code"].values[0]}')
+            
+            print(self.samples)
+            print("Unique: ", np.unique(self.labels))
+            
         self.samples = np.asarray(self.samples)
         self.labels = np.asarray(self.labels)
+        log.info(f'Read {len(self.samples)} samples from mapfile {self.sample_map_path}')
+        log.info(f'Read {len(self.labels)} labels from mapfile {self.sample_map_path}')
         #self.ancestry_names = np.asarray(self.ancestry_names)
         ## Reading VCF.
-        vcf_data = allel.read_vcf(self.vcf_file_path)
+        
+        if self.preloaded_data_pointer is not None:
+            log.info(f'Using preloaded data from another online simulator.')
+            vcf_data = self.preloaded_data_pointer
+        else:
+            log.info(f'Loading genotypes from VCF file: {self.vcf_file_path}')
+            vcf_data = allel.read_vcf(self.vcf_file_path)
+        if self.save_vcf_pointer:
+            self.vcf_data = vcf_data
         ## Intersection between samples from VCF and samples from .map.
-        inter = np.intersect1d(vcf_data['samples'], self.samples, assume_unique=False, return_indices=True)
-        samp, idx = inter[0], inter[1]
+        log.info(f'Read {len(vcf_data["samples"])} samples from VCF {self.vcf_file_path}')
+        samp, idx_inter_vcf, idx_inter_mapfile = np.intersect1d(vcf_data['samples'], self.samples, assume_unique=False, return_indices=True)
+        log.info(f'{len(idx_inter_vcf)} samples at intersection of mapfile and VCF.')
 
         ## Filter only interecting samples.
-        self.snps = vcf_data['calldata/GT'].transpose(1,2,0)[idx,...]
-        self.samples_vcf = vcf_data['samples'][idx]
+        self.snps = vcf_data['calldata/GT'].transpose(1,2,0)[idx_inter_vcf,...]
+        self.samples_vcf = vcf_data['samples'][idx_inter_vcf]
+        log.info(f'Using {len(self.samples_vcf)} {self.species} samples for simulation.')
+        
+        self.samples = self.samples_vcf# self.samples[idx_inter_mapfile]
+        self.labels = self.labels[idx_inter_mapfile]
         
         ## Save header info of VCF file.
         self.info = {
@@ -105,24 +134,35 @@ class OnlineSimulator:
         if verbose: log.info('Done loading vcf and .map files...')
         
         ## Map labels from map file to VCF samples
-        argidx = np.argsort(self.samples_vcf)
-        self.samples_vcf = self.samples_vcf[argidx]
-        self.snps = self.snps[argidx, ...]
+        #argidx = np.argsort(self.samples_vcf)
+        #self.samples_vcf = self.samples_vcf[argidx]
+        #self.snps = self.snps[argidx, ...]
 
-        argidx = np.argsort(self.samples)
-        self.samples = self.samples[argidx]
-        self.labels = self.labels[argidx, ...]
-
-        num_samples = len(self.samples)
+        #argidx = np.argsort(self.samples)
+        #log.info(f'Argidx from self.samples: {len(argidx)}: {argidx}')
+        #self.samples = self.samples[argidx]
+        #self.labels = self.labels[argidx, ...]
 
         if verbose:
-            log.info(f'A total of {num_samples} diploid individuals where found in the vcf and .map.')
+            log.info(f'A total of {len(self.samples)} diploid individuals where found in the vcf and .map.')
             log.info(f'A total of {len(self.ancestries)} ancestries where found: {self.ancestries}.')
 
         if make_haploid:
-            n_samples, n_seq, n_snps = self.snps.shape
-            self.snps = self.snps.reshape(n_samples * n_seq, n_snps)
-            self.labels = np.repeat(self.labels, 2)
+            if isinstance(self.chm, int):
+                n_samples, n_seq, n_snps = self.snps.shape
+                _ = self.snps.shape
+                self.snps = self.snps.reshape(n_samples * n_seq, n_snps)
+                log.info(f'Reshaping {len(self.labels)} into {len(self.labels) * 2}')
+                self.labels = np.repeat(self.labels, 2)
+                log.info(f'Reshaping {_} into {self.snps.shape}')
+            elif isinstance(self.chm, str) and self.chm == 'all': 
+                n_samples, n_seq, n_snps = self.snps.shape
+                _ = self.snps.shape
+                log.info(n_samples, n_seq, n_snps)
+                self.snps = self.snps.reshape(n_samples * n_seq, n_snps)
+                log.info(f'Reshaping {len(self.labels)} into {len(self.labels) * 2}')
+                self.labels = np.repeat(self.labels, 2)
+                log.info(f'Reshaping {_} snps into {self.snps.shape}')
     
     def _simulate_from_pool(self, batch_snps, batch_labels, batch_size, num_generation_max, num_generation, generation_num_list, rate_per_snp, cM):
         ## If simulate_in_device, batch is moved into device before simulation, 
@@ -158,7 +198,7 @@ class OnlineSimulator:
             split_point_list = torch.randint(num_snps, (int(num_generation*switch_per_generation),))  
 
         ## else if chr number is available, a hardcoded cM (for humans) is used.
-        elif (self.chm is not None) and self.species == 'human':
+        elif (self.chm is not None) and isinstance(self.chm, int) and self.species == 'human':
             cM_list = [286.279234, 268.839622, 223.361095, 214.688476, 204.089357, 192.039918, 187.2205, 168.003442, 166.359329, 181.144008, 158.21865, 174.679023, 125.706316, 120.202583, 141.860238, 134.037726, 128.490529, 117.708923, 107.733846, 108.266934, 62.786478, 74.109562]
             switch_per_generation = cM_list[(int(self.chm)-1)]/100
             split_point_list = torch.randint(num_snps, (int(num_generation*switch_per_generation),))  
@@ -176,8 +216,10 @@ class OnlineSimulator:
         return batch_snps, batch_labels
         
     
-    def simulate(self, num_generation_max=100, num_generation=None, generation_num_list=[1,2,4,8,16,32,64,128], rate_per_snp=None, cM=None):
-                     
+    def simulate(self, batch_size=None, num_generation_max=100, num_generation=None, generation_num_list=[1,2,4,8,16,32,64,128], rate_per_snp=None, cM=None):
+        
+        batch_size = self.batch_size if batch_size is None else batch_size
+        
         with torch.no_grad():
 
             ## Make sure input arrays are pytorch tensors.
@@ -197,14 +239,14 @@ class OnlineSimulator:
             ## Select samples randomly in the pool.
             if (not self.single_ancestry) and (not self.balanced):
                 
-                rand_idx = torch.randint(num_samples, (self.batch_size,))
+                rand_idx = torch.randint(num_samples, (batch_size,))
                 batch_snps = self.snps[rand_idx,:]
                 batch_labels = self.labels[rand_idx,:]
                 
                 batch_snps, batch_labels = self._simulate_from_pool(
                     batch_snps=batch_snps, 
                     batch_labels=batch_labels, 
-                    batch_size=self.batch_size, 
+                    batch_size=batch_size, 
                     num_generation_max=num_generation_max, 
                     num_generation=num_generation, 
                     generation_num_list=generation_num_list, 
@@ -222,7 +264,7 @@ class OnlineSimulator:
                     batch_labels = batch_labels.to(self.device)
 
                 for i, ancestry in enumerate(self.ancestries):
-                    aux_batch_size = (self.batch_size // len(self.ancestries)) + (0 if i < len(self.ancestries) - 1 else self.batch_size % len(self.ancestries))
+                    aux_batch_size = (batch_size // len(self.ancestries)) + (0 if i < len(self.ancestries) - 1 else batch_size % len(self.ancestries))
                     ancestry_idx = np.where(self.labels[:,0] == i)[0]
                     rand_ancestry_idx = torch.randint(len(ancestry_idx), (aux_batch_size,))
                     
@@ -232,14 +274,14 @@ class OnlineSimulator:
                     batch_labels = torch.cat([batch_labels, anc_batch_labels], axis=0)
                 
                 ## Permute ancestries.
-                permute_idx = torch.randperm(self.batch_size)
+                permute_idx = torch.randperm(batch_size)
                 batch_snps  = batch_snps[permute_idx,:]
                 batch_labels = batch_labels[permute_idx,:]
                 
                 batch_snps, batch_labels = self._simulate_from_pool(
                     batch_snps=batch_snps, 
                     batch_labels=batch_labels, 
-                    batch_size=self.batch_size, 
+                    batch_size=batch_size, 
                     num_generation_max=num_generation_max, 
                     num_generation=num_generation, 
                     generation_num_list=generation_num_list, 
@@ -256,8 +298,13 @@ class OnlineSimulator:
                     batch_labels = batch_labels.to(self.device)
 
                 for i, ancestry in enumerate(self.ancestries):
-                    aux_batch_size = (self.batch_size // len(self.ancestries)) + (0 if i < len(self.ancestries) - 1 else self.batch_size % len(self.ancestries))
+                    aux_batch_size = (batch_size // len(self.ancestries)) + (0 if i < len(self.ancestries) - 1 else batch_size % len(self.ancestries))
                     ancestry_idx = np.where(self.labels[:,0] == i)[0]
+                    if len(ancestry_idx) == 0:
+                        log.info(f'Skipping ancestry {ancestry} as there are no samples.')
+                        continue
+                    else:
+                        log.info(f'Ancestry {ancestry} has {len(ancestry_idx)} indexes.')
                     rand_ancestry_idx = torch.randint(len(ancestry_idx), (aux_batch_size,))
                     
                     anc_batch_snps = self.snps[ancestry_idx,:][rand_ancestry_idx,:].int()
@@ -285,6 +332,3 @@ class OnlineSimulator:
                 raise Exception('Not implemented.')
             
             return batch_snps.float(), batch_labels.float()
-    
-    
- 
