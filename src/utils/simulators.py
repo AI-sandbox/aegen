@@ -9,16 +9,41 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 class OnlineSimulator:
-    def __init__(self, batch_size, n_populations, mode='uniform', device='cpu', species='human', chm=22, split='train', balanced=True, save_vcf_pointer=False, preloaded_data_pointer=None):
+    """
+    INIT PARAMETERS:
+        batch_size: defines the [batch_size] to simulate by default.
+        
+        n_populations: defines the number of populations present in the simulation pool.
+        
+        mode: simulation mode can be [uniform], [exponential], [pre-defined], [fix].
+        
+        device: choose the device where launch the simulation process. Can be either [cpu] or [cuda].
+        
+        species: define the species: [human] or [canid].
+        
+        chm: define the chromosome(s). If chm is an integer it will perform simulation on SNP data
+            of that chromosome. If chm is [all] then simulation will be performed on embark data.
+            
+        split: choose the split data [train], [valid], [test].
+        
+        balanced: defines if the number of single-ancestry samples in the batches is balanced.
+        
+        save_vcf_pointer: if several online simulators are used in one script, a pointer to the VCF
+            file can be saved to avoid memory overhead.
+            
+        preloaded_data_pointer: use it to point to a VCF file loaded by another online simulator.
+        
+    """
+    def __init__(self, batch_size, mode='uniform', device='cpu', species='human', chm=22, split='train', granular_simulation=False, single_ancestry=True, balanced=True, save_vcf_pointer=False, preloaded_data_pointer=None):
         ## Hyperparams set by user.
         self.species = species
         self.chm = chm
+        self.granular_simulation = granular_simulation
         self.split = split
         self.batch_size = batch_size
-        self.n_populations = n_populations
         self.mode = mode
         self.device = device
-        self.single_ancestry = (n_populations is not None)
+        self.single_ancestry = single_ancestry
         self.balanced = balanced
         self.save_vcf_pointer = save_vcf_pointer
         self.preloaded_data_pointer = preloaded_data_pointer
@@ -38,6 +63,7 @@ class OnlineSimulator:
         ## Prepare ancestry list.
         ## Generate single ancestry sample maps for species.
         self.ancestries = self._get_ancestries()
+        self.n_populations = len(self.ancestries)
         if self.single_ancestry:
             assert(len(self.ancestries) == self.n_populations)
             
@@ -47,7 +73,48 @@ class OnlineSimulator:
     def _get_ancestries(self):
         ref_panel_metadata = pd.read_csv(self.reference_panel_path, sep="\t", header=0)
         ## Define ancestries (superpop)
-        return ref_panel_metadata['Superpopulation code'].unique()
+        if self.granular_simulation:
+            return ref_panel_metadata[ref_panel_metadata['Population'].notna()]['Population'].unique()
+        else:
+            return ref_panel_metadata[ref_panel_metadata['Superpopulation code'].notna()]['Superpopulation code'].unique()
+    
+    # Read the reference file and filter by default criteria of single_ancestry=1
+    def _filter_reference_file(self):
+        ref_panel_metadata = pd.read_csv(self.reference_panel_path, sep="\t", header=0)
+        ref_panel_metadata['ref_idx'] = ref_panel_metadata.index
+        ref_panel_metadata = ref_panel_metadata[ref_panel_metadata['Single_Ancestry']==1].reset_index(drop=True)
+        return ref_panel_metadata
+    
+    def _create_sample_map(self, min_samples=10):
+        mapfile = self._filter_reference_file()
+        populations = self._get_ancestries()
+        mapping = dict(zip(populations,np.arange(0,len(populations))))
+        if self.granular_simulation:
+            mapfile = mapfile.groupby('Population').filter(lambda x: len(x) > min_samples)
+            codes = mapfile['Population'].apply(lambda x: mapping[x])
+        else:
+            codes = mapfile['Superpopulation code'].apply(lambda x: mapping[x])
+            
+        samplemap = pd.DataFrame({'samples': mapfile['Sample'], 'code': codes})
+        if isinstance(self.chm, int): raise Exception('Not implemented!')
+        elif isinstance(self.chm, str) and self.chm == 'all':
+            samplemap.to_csv(self.sample_map_path, header=False, sep="\t", index=False)
+    
+    def _split_sample_map(self, ratios = [0.8, 0.1, 0.1]):
+        if isinstance(self.chm, int): raise Exception('Not implemented!')
+        elif isinstance(self.chm, str) and self.chm == 'all':
+            ancestry_df = pd.read_csv(self.sample_map_path, sep='\t', header=None, comment="#", dtype=str)
+            data = ancestry_df.sample(frac=1, random_state=123)
+            proportions = np.add.accumulate(np.array(ratios) * data.shape[0]).astype(int)
+            train, valid, test = np.split(data, proportions[:-1])
+
+            log.info(f'\t{train.shape[0]} founders for training')
+            log.info(f'\t{valid.shape[0]} founders for validation')
+            log.info(f'\t{test.shape[0]} founders for test')
+            
+            train.to_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{self.species}/allchm/prepared/train/sample.map'), sep="\t", header=None, index=False)
+            valid.to_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{self.species}/allchm/prepared/valid/sample.map'), sep="\t", header=None, index=False)
+            test.to_csv(os.path.join(os.environ.get('OUT_PATH'), f'data/{self.species}/allchm/prepared/test/sample.map'), sep="\t", header=None, index=False)
     
     def _load_map_file(self):
         if isinstance(self.chm, int):
@@ -127,6 +194,12 @@ class OnlineSimulator:
         }
         
     def _load_founders(self, single_ancestry=True, make_haploid=True, verbose=True):
+        ## Create .map files.
+        if verbose: log.info('Creating .map files...')
+        self._create_sample_map()
+        ## Split sample map.
+        if verbose: log.info('Splitting .map files...')
+        self._split_sample_map()
         ## Load .map files.
         if verbose: log.info('Loading vcf and .map files...')
         self._load_map_file()
@@ -152,17 +225,17 @@ class OnlineSimulator:
                 n_samples, n_seq, n_snps = self.snps.shape
                 _ = self.snps.shape
                 self.snps = self.snps.reshape(n_samples * n_seq, n_snps)
-                log.info(f'Reshaping {len(self.labels)} into {len(self.labels) * 2}')
+                print(f'Reshaping {len(self.labels)} into {len(self.labels) * 2}')
                 self.labels = np.repeat(self.labels, 2)
-                log.info(f'Reshaping {_} into {self.snps.shape}')
+                print(f'Reshaping {_} into {self.snps.shape}')
             elif isinstance(self.chm, str) and self.chm == 'all': 
                 n_samples, n_seq, n_snps = self.snps.shape
                 _ = self.snps.shape
                 log.info(n_samples, n_seq, n_snps)
                 self.snps = self.snps.reshape(n_samples * n_seq, n_snps)
-                log.info(f'Reshaping {len(self.labels)} into {len(self.labels) * 2}')
+                print(f'Reshaping {len(self.labels)} into {len(self.labels) * 2}')
                 self.labels = np.repeat(self.labels, 2)
-                log.info(f'Reshaping {_} snps into {self.snps.shape}')
+                print(f'Reshaping {_} snps into {self.snps.shape}')
     
     def _simulate_from_pool(self, batch_snps, batch_labels, batch_size, num_generation_max, num_generation, generation_num_list, rate_per_snp, cM):
         ## If simulate_in_device, batch is moved into device before simulation, 

@@ -105,7 +105,8 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         online_simulator = OnlineSimulator(
             chm = model['chm'],
             batch_size = hyperparams['batch_size'],
-            n_populations = model['num_classes'],
+            single_ancestry=hyperparams['single_ancestry'], 
+            granular_simulation=hyperparams['granular_simulation'],
             mode = hyperparams['training']['mode'],
             balanced = hyperparams['training']['balanced'],
             device = hyperparams['training']['device'],
@@ -118,7 +119,8 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
         online_simulator_vd = OnlineSimulator(
             chm = model['chm'],
             batch_size = hyperparams['batch_size'],
-            n_populations = model['num_classes'],
+            single_ancestry=hyperparams['single_ancestry'], 
+            granular_simulation=hyperparams['granular_simulation'],
             mode = hyperparams['validation']['mode'],
             balanced = hyperparams['validation']['balanced'],
             device = hyperparams['validation']['device'],
@@ -148,8 +150,7 @@ def train(model, optimizer, hyperparams, stats, tr_loader, vd_loader, ts_loader,
                 labels = batch[1].to(device) if model['conditional'] else None
             else: 
                 snps_array, labels = online_simulator.simulate(num_generation_max=hyperparams['training']['num_generation_max'])
-                snps_array, labels = snps_array[:, :model['isize']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
-                labels = labels if model['conditional'] else None
+                snps_array, labels = snps_array[:, :model['isize']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device) if model['conditional'] else None
             
             snps_reconstruction = None
             ## Forward inputs through net.
@@ -402,8 +403,7 @@ def validate(model, vd_loader, epoch, verbose, hyperparams, monitor=None, device
                 labels = batch[1].to(device) if model['conditional'] else None
             else: 
                 snps_array, labels = simulator.simulate(num_generation_max=hyperparams['validation']['num_generation_max'])
-                snps_array, labels = snps_array[:, :model['isize']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device)
-                labels = labels if model['conditional'] else None
+                snps_array, labels = snps_array[:, :model['isize']].to(device), one_hot_encoder(labels[:,0].int(), model['num_classes']).to(device) if model['conditional'] else None
                 
             snps_reconstruction = None
             ## Forward inputs through net.
