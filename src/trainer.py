@@ -387,10 +387,11 @@ if __name__ == '__main__':
     train(
         model={
             'architecture': model_params['shape'] + (' AE' if not model_params['conditioning']['using'] else ' C-AE'),
-            'chm':chm,
-            'shape':model_params['shape'],
-            'isize':model_params['encoder']['layer0']['size'],
-            'bsize':model_params['decoder']['layer0']['size'],
+            'species': model_params['species'],
+            'chm': chm,
+            'shape': model_params['shape'],
+            'isize': model_params['encoder']['layer0']['size'],
+            'bsize': model_params['decoder']['layer0']['size'],
             'window_size': model_params['window_size'] if model_params['shape'] == 'window-based' else None,
             'window_cloning': model_params['window_cloning'] if model_params['shape'] == 'window-based' else None,
             'window_train_mode': model_params['window_train_mode'],

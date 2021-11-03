@@ -2,14 +2,15 @@
 model: 
   ## Shape can be: [global, window-based, hybrid].
   shape: global
-  ## Model trained on species:
-  species: human
+  ## Model trained on species: [human, canid]
+  species: canid
   ## Model trained on chromosome:
   chm: all
   ## Segment of SNPs to process.
   arange:
      ini: 0
-     end: 839629
+     end: 198473 
+     #[human: 839629, canid: 198473]
   ## If shape is [hybrid] define n_windows, otherwise leave it null.
   n_windows: null
   ## If shape is [global, window-based] define window_size, otherwise leave it null.
@@ -57,15 +58,15 @@ model:
   ## The last layer has only one parameter: [size].
   encoder:
     layer0:
-      size: 839629
+      size: 198473
       dropout: 0
       normalize: true
-      activation: GELU
+      activation: ReLU
     layer1:
       size: 512
       dropout: 0
       normalize: true
-      activation: GELU
+      activation: ReLU
     layer2:
       size: 64
       dropout: 0
@@ -84,26 +85,26 @@ model:
       size: 2
       dropout: 0
       normalize: true
-      activation: GELU
+      activation: ReLU
     layer1:
       size: 64
       dropout: 0
       normalize: true
-      activation: GELU
+      activation: ReLU
     layer2:
       size: 512
       dropout: 0
       normalize: true
       activation: Sigmoid
     layer3:
-      size: 839629
+      size: 198473
 
 ## Hyperparameters for training.
 hyperparams:
   epochs: 2000
   batch_size: 512
   single_ancestry: true
-  granular_simulation: true
+  granular_simulation: false
   slide: 15
   loss:
       ## Variational beta.
