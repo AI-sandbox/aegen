@@ -49,15 +49,26 @@ class OnlineSimulator:
         self.preloaded_data_pointer = preloaded_data_pointer
         
         ## Pre-defined paths.
-        self.reference_panel_path = os.path.join(os.environ.get('IN_PATH'),f'data/{self.species}/reference_panel_metadata_v2.tsv')
-        self.genetic_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchrs.b37.gmap')
+        if self.species == 'human':
+            self.reference_panel_path = os.path.join(os.environ.get('IN_PATH'),f'data/{self.species}/reference_panel_metadata_v2.tsv')
+            self.genetic_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchrs.b37.gmap')
+        elif self.species == 'canid':
+            self.reference_panel_path = os.path.join(os.environ.get('IN_PATH'),f'data/{self.species}/Metadata_May2018.tsv')
+            self.genetic_map_path = None
+        else: raise Exception('Unknown species!')
         
         if isinstance(self.chm, int):
-            self.vcf_file_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/chr{self.chm}/ref_final_beagle_phased_1kg_hgdp_sgdp_chr{self.chm}_hg19.vcf')
-            self.sample_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/maps')
+            if self.species == 'human':
+                self.vcf_file_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/chr{self.chm}/ref_final_beagle_phased_1kg_hgdp_sgdp_chr{self.chm}_hg19.vcf')
+                self.sample_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/maps')
+            elif self.species == 'canid': raise Exception('Single chromosome canid simulation not implemented!')
         elif isinstance(self.chm, str) and self.chm == 'all':
-            self.vcf_file_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchm/whole_filt_ld_single.vcf')
-            self.sample_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchm/prepared/{self.split}/sample.map')
+            if self.species == 'human':
+                self.vcf_file_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchm/whole_filt_ld_single.vcf')
+                self.sample_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchm/prepared/{self.split}/sample.map')
+            elif self.species == 'canid':
+                self.vcf_file_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchm/subset_allchr.vcf')
+                self.sample_map_path = os.path.join(os.environ.get('IN_PATH'), f'data/{self.species}/allchm/prepared/{self.split}/sample.map')
         else: raise Exception('Unknown chromosome.')
         
         ## Prepare ancestry list.
@@ -66,18 +77,33 @@ class OnlineSimulator:
         self.n_populations = len(self.ancestries)
         if self.single_ancestry:
             assert(len(self.ancestries) == self.n_populations)
-            
+        log.info(f'{self.n_populations} populations found!')
+        
         ## Prepare simulator.
         self._load_founders(single_ancestry=self.single_ancestry)
         
-    def _get_ancestries(self):
-        ref_panel_metadata = pd.read_csv(self.reference_panel_path, sep="\t", header=0)
-        ## Define ancestries (superpop)
-        if self.granular_simulation:
-            return ref_panel_metadata[ref_panel_metadata['Population'].notna()]['Population'].unique()
-        else:
-            return ref_panel_metadata[ref_panel_metadata['Superpopulation code'].notna()]['Superpopulation code'].unique()
-    
+    def _get_ancestries(self, ref_panel_metadata=None):
+        
+        ## Read metadata if not passed by parameter.
+        if ref_panel_metadata is None:
+            ref_panel_metadata = pd.read_csv(self.reference_panel_path, sep="\t", header=0)
+        
+        ## Define human ancestries.
+        if self.species == 'human':
+            if self.single_ancestry:
+                ref_panel_metadata = ref_panel_metadata[ref_panel_metadata['Single_Ancestry'] == 1]
+            if self.granular_simulation:
+                return ref_panel_metadata[ref_panel_metadata['Population'].notna()]['Population'].unique()
+            else:
+                return ref_panel_metadata[ref_panel_metadata['Superpopulation code'].notna()]['Superpopulation code'].unique()
+        
+        ## Define canine ancestries.
+        elif self.species == 'canid':
+            if self.granular_simulation: raise Exception('Not enough samples!')
+            else:
+                return ref_panel_metadata[ref_panel_metadata['Breed/CommonName'].notna()]['Breed/CommonName'].unique()
+                #ref_panel_metadata.loc[meta['Name_ID'].isin(dogs['samples'])].groupby('Breed/CommonName').filter(lambda x: len(x) > min_samples)
+        
     # Read the reference file and filter by default criteria of single_ancestry=1
     def _filter_reference_file(self):
         ref_panel_metadata = pd.read_csv(self.reference_panel_path, sep="\t", header=0)
@@ -85,22 +111,39 @@ class OnlineSimulator:
         ref_panel_metadata = ref_panel_metadata[ref_panel_metadata['Single_Ancestry']==1].reset_index(drop=True)
         return ref_panel_metadata
     
-    def _create_sample_map(self, min_samples=10):
-        mapfile = self._filter_reference_file()
-        populations = self._get_ancestries()
-        mapping = dict(zip(populations,np.arange(0,len(populations))))
-        if self.granular_simulation:
-            mapfile = mapfile.groupby('Population').filter(lambda x: len(x) > min_samples)
-            codes = mapfile['Population'].apply(lambda x: mapping[x])
-        else:
-            codes = mapfile['Superpopulation code'].apply(lambda x: mapping[x])
-            
-        samplemap = pd.DataFrame({'samples': mapfile['Sample'], 'code': codes})
+    def _create_sample_map(self):
+        
+        ## Define minimum number of samples per population.
+        min_samples = (10 if self.species == 'human' else 3)
+        mapfile = pd.read_csv(self.reference_panel_path, sep="\t", header=0)
+        if self.single_ancestry and self.species == 'human':
+            mapfile = mapfile[mapfile['Single_Ancestry'] == 1]    
+        ## Define mapping population --> integer code.
+        mapping = dict(zip(self.ancestries, np.arange(0,len(self.ancestries))))
+        
+        ## Create human sample map.
+        if self.species == 'human':
+            if self.granular_simulation:
+                mapfile = mapfile.groupby('Population').filter(lambda x: len(x) > min_samples)
+                codes = mapfile['Population'].apply(lambda x: mapping[x])
+            else:
+                codes = mapfile['Superpopulation code'].apply(lambda x: mapping[x])
+            samplemap = pd.DataFrame({'samples': mapfile['Sample'], 'code': codes})
+        
+        ## Create canine sample map.
+        elif self.species == 'canid':
+            if self.granular_simulation: raise Exception('Not enough samples!')
+            else:
+                mapfile = mapfile.groupby('Breed/CommonName').filter(lambda x: len(x) > min_samples)
+                codes = mapfile['Breed/CommonName'].apply(lambda x: mapping[x])
+            samplemap = pd.DataFrame({'samples': mapfile['Name_ID'], 'code': codes})
+        
+        ## Store generated sample map at root folder of chm (before splitting).
         if isinstance(self.chm, int): raise Exception('Not implemented!')
         elif isinstance(self.chm, str) and self.chm == 'all':
             samplemap.to_csv(self.sample_map_path, header=False, sep="\t", index=False)
     
-    def _split_sample_map(self, ratios = [0.8, 0.1, 0.1]):
+    def _split_sample_map(self, ratios = [0.85, 0.05, 0.05]):
         if isinstance(self.chm, int): raise Exception('Not implemented!')
         elif isinstance(self.chm, str) and self.chm == 'all':
             ancestry_df = pd.read_csv(self.sample_map_path, sep='\t', header=None, comment="#", dtype=str)
@@ -195,10 +238,8 @@ class OnlineSimulator:
         
     def _load_founders(self, single_ancestry=True, make_haploid=True, verbose=True):
         ## Create .map files.
-        if verbose: log.info('Creating .map files...')
         self._create_sample_map()
         ## Split sample map.
-        if verbose: log.info('Splitting .map files...')
         self._split_sample_map()
         ## Load .map files.
         if verbose: log.info('Loading vcf and .map files...')
@@ -231,7 +272,6 @@ class OnlineSimulator:
             elif isinstance(self.chm, str) and self.chm == 'all': 
                 n_samples, n_seq, n_snps = self.snps.shape
                 _ = self.snps.shape
-                log.info(n_samples, n_seq, n_snps)
                 self.snps = self.snps.reshape(n_samples * n_seq, n_snps)
                 print(f'Reshaping {len(self.labels)} into {len(self.labels) * 2}')
                 self.labels = np.repeat(self.labels, 2)
