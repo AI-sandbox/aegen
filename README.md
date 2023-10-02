@@ -1,8 +1,18 @@
-# ægen
-Autoencoders for genomic data compression, classification, imputation, phasing and simulation.
 
-## Overview
-ægen is a meta-autoencoder which allows to customize the shape of the autoencoder and specify the desired latent space distribution. Additionally, it allows to use conditioning and/or denoising modes.
+# ægen [![DOI - 10.1101/2023.09.27.558320](https://img.shields.io/badge/DOI-10.1101%2F2023.09.27.558320-2ea44f)](https://doi.org/10.1101/2023.09.27.558320)
+
+ægen is a meta-autoencoder which allows to customize the shape of the autoencoder and specify the desired latent space distribution. Additionally, it allows to use conditioning and/or denoising modes. If you find this paper or implementation useful, please consider citing our bioRxiv preprint!
+```{tex}
+@article{geleta2023aegen,
+	author = {Margarita Geleta and Daniel Mas Montserrat and Xavier Giro-i-Nieto and Alexander G Ioannidis},
+	title = {Deep Variational Autoencoders for Population Genetics},
+	year = {2023},
+	doi = {10.1101/2023.09.27.558320},
+	URL = {https://www.biorxiv.org/content/early/2023/09/28/2023.09.27.558320},
+	eprint = {https://www.biorxiv.org/content/early/2023/09/28/2023.09.27.558320.full.pdf},
+	journal = {bioRxiv}
+}
+```
 
 ## Dependencies
 
@@ -92,6 +102,5 @@ TODO
 ## Pre-trained models
 TODO
 
-
-
-
+## License
+NOTICE: This software is available for use free of charge for academic research use only. Academic users may fork this repository and modify and improve to suit their research needs, but also inherit these terms and must include a licensing notice to that effect. Commercial users, for profit companies or consultants, and non-profit institutions not qualifying as "academic research" should contact `geleta@berkeley.edu`. This applies to this repository directly and any other repository that includes source, executables, or git commands that pull/clone this repository as part of its function. Such repositories, whether ours or others, must include this notice.
