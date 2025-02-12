@@ -69,10 +69,17 @@ In order to run the offline simulation, execute the following commands:
 ```console
 $ cd scripts
 $ source ini.sh
-## Create single-ancestry maps and simulate single-ancestry individuals within each split.
-$ ./simulate.sh species=human generations=[desired num of generations] individuals=[desired num of ind/gen]
+## Create single-ancestry maps for training, validation, and test:
+$ python3 $USER_PATH/src/utils/mapper.py --species [species]
+## Simulate single-ancestry individuals within each split.
+$ python3 $USER_PATH/src/pyadmix/admix.py [vcf file] $OUT_PATH/data/[species]/chr[chr_number]/prepared/ [desired num of generations] [desired num of ind/gen]
 ## Create HDF5 datasets for each split with the specified number of SNPs.
-$ ./create.sh snps=[desired num snps]
+$ cd ../src
+$ python3
+> from utils.assemblers import create_dataset; import logging;
+> logging.basicConfig(level=logging.INFO)
+> log = logging.getLogger(__name__)
+> create_dataset(chm=[chr_number], max_size=[desired num snps])
 ```
 
 ## Training
