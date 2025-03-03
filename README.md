@@ -75,11 +75,30 @@ $ python3 $USER_PATH/src/utils/mapper.py --species [species]
 $ python3 $USER_PATH/src/pyadmix/admix.py [vcf file] $OUT_PATH/data/[species]/chr[chr_number]/prepared/ [desired num of generations] [desired num of ind/gen]
 ## Create HDF5 datasets for each split with the specified number of SNPs.
 $ cd ../src
+$ species=[species to generate]
+$ chm=[chm number to generate]
+$ split=[data split to generate]
+$ ini=[initial snp position]
+$ end=[final snp position]
 $ python3
 > from utils.assemblers import create_dataset; import logging;
 > logging.basicConfig(level=logging.INFO)
 > log = logging.getLogger(__name__)
-> create_dataset(chm=[chr_number], max_size=[desired num snps])
+> create_dataset('$species','$chm',split='$split',arange=($ini,$end))
+```
+In order to use the online simulator in code, use the following constructor:
+```python3
+online_simulator = OnlineSimulator(
+    species = [species to generate],
+    chm = [chm number to generate],
+    batch_size = [batch size],
+    single_ancestry=[True/False], 
+    granular_simulation=[True/False],
+    mode = 'uniform',
+    balanced = [True/False],
+    device = [use cuda for GPU],
+)
+simulated_snps, simulated_labels = online_simulator.simulate(num_generation_max=max_gen)
 ```
 
 ## Training
@@ -108,10 +127,43 @@ Or, if using a Slurm queue, running `./submit.sh experiment=[number]` in the `sc
 ## Evaluation
 
 ### Compression benchmarks
-To run the compression benchmarks, please refer to the script under `src/eval/compressors.py`.
+To run the compression benchmarks, please refer to the script under `src/eval/compressors.py` for more details, which has the constructor for running the benchmark with the VQ-VAE in the loop:
+```python3
+import time
+sys.path.insert(0, '/home/users/geleta/aegen/src')
+from eval.compressors import *
 
-## Pre-trained models
-Not public yet.
+lzae = LZAE([experiment number])
+
+start_time = time.time()
+benchmark = lzae.benchmark(
+    data=snps.astype(bool),  # snps is a HDF5 dataset
+    batch_size=[batch size], 
+    algorithms=['genozip'],  # or 'zstd'
+    shuffle=blosc.NOSHUFFLE
+)
+end_time = time.time()
+print(benchmark)
+```
+For the rest of comparisons, we ran the following commands:
+```console
+$ time gzip -9 -c $OUT_PATH/data/[species]/[chm number]/prepared/test/compression_bench_test_subset.h5 \
+> $OUT_PATH/data/[species]/[chm number]/prepared/test/compressed_test_subset_gzip9.gz
+
+$ time ./zpaqd c 3 $OUT_PATH/data/[species]/[chm number]/prepared/test/compressed_test_subset_zpaq.zpaq \
+$OUT_PATH/data/[species]/[chm number]/prepared/test/compression_bench_test_subset.h5
+
+$ time zstd $OUT_PATH/data/[species]/[chm number]/prepared/test/compression_bench_test_subset.h5 \
+> $OUT_PATH/data/[species]/[chm number]/prepared/test/compressed_test_subset_zst.zst
+
+$ time ./genozip --input generic --force -o $OUT_PATH/data/[species]/[chm number]/prepared/test/compressed_test_subset_genozip.genozip \
+$OUT_PATH/data/[species]/[chm number]/prepared/test/compression_bench_test_subset.h5
+```
+For bref3, we first convert the HDF5 dataset to a VCF, and then we run the following command:
+```console
+$ time java -jar bref3.17Dec24.224.jar $OUT_PATH/data/[species]/[chm number]/prepared/test/to_bref3.vcf \
+> $OUT_PATH/data/[species]/[chm number]/prepared/test/compressed_test_subset_bref3.bref
+```
 
 ## License
 NOTICE: This software is available for use free of charge for academic research use only. Academic users may fork this repository and modify and improve to suit their research needs, but also inherit these terms and must include a licensing notice to that effect. Commercial users, for profit companies or consultants, and non-profit institutions not qualifying as "academic research" should contact `geleta@berkeley.edu`. This applies to this repository directly and any other repository that includes source, executables, or git commands that pull/clone this repository as part of its function. Such repositories, whether ours or others, must include this notice.
