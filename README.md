@@ -100,6 +100,7 @@ online_simulator = OnlineSimulator(
 )
 simulated_snps, simulated_labels = online_simulator.simulate(num_generation_max=max_gen)
 ```
+![Simulating admixture](./images/admixed_320_gens.png)
 
 ## Training
 The proposed method consists of a highly-adaptable and modular autoencoder that accepts flags to switch to conditioning mode, use different encoder/decoder architectures and specifiy the distribution at the bottleneck of the model. Furthermore, the model accepts two sets: (1) **a set of fixed parameters**, which defines the shape of the network, conditioning, number and size of layers in the encoder/decoder, dropouts, batch normalization and activation functions; (2) **a set of hyperparameters**, which defines optimizer flags and values, such as, the learning rate, weight decay, data augmentation simulation mode, among others. All of those parameters and hyperparameters are defined in the `params.yaml` file in the root folder of this repository. Once both sets have been specifies, a training session can be started by using:
@@ -123,6 +124,8 @@ $ python3 $USER_PATH/src/trainer.py \
 --evolution False
 ```
 Or, if using a Slurm queue, running `./submit.sh experiment=[number]` in the `scripts` folder.
+
+![VAE models](./images/pca_vs_vae.png)
 
 ## Evaluation
 
