@@ -5,14 +5,18 @@
 
 ægen is a meta-autoencoder which allows to customize the shape of the autoencoder (regular, window-based, or hybrid) and specify the desired latent space distribution (Gaussian, Multi-Bernoulli, or VQ-VAE). Additionally, it allows to use conditioning and/or denoising modes. If you find this paper or implementation useful, please consider citing our bioRxiv preprint!
 ```{tex}
-@article{geleta2023aegen,
-	author = {Margarita Geleta and Daniel Mas Montserrat and Xavier Giro-i-Nieto and Alexander G Ioannidis},
-	title = {Deep Variational Autoencoders for Population Genetics},
-	year = {2023},
-	doi = {10.1101/2023.09.27.558320},
-	URL = {https://www.biorxiv.org/content/early/2023/09/28/2023.09.27.558320},
-	eprint = {https://www.biorxiv.org/content/early/2023/09/28/2023.09.27.558320.full.pdf},
-	journal = {bioRxiv}
+@article {Geleta348-360,
+	author = {Geleta, Margarita and Montserrat, Daniel Mas and Giro-i-Nieto, Xavier and Ioannidis, Alexander G.}
+	title = {Autoencoders for genomic variation analysis},
+	volume = {36},
+	number = {2},
+	pages = {348-360},
+	year = {2026},
+	doi = {10.1101/gr.280086.124},
+	publisher = {Genome Res.},
+	URL = {http://genome.cshlp.org/content/genome/36/2/348}
+	eprint = {http://genome.cshlp.org/content/genome/36/2/348.full.pdf},
+	journal = {Genome Research}
 }
 ```
 
